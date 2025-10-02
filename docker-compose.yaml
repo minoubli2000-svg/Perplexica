@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   searxng:
     image: docker.io/searxng/searxng:latest
@@ -23,7 +25,7 @@ services:
       - perplexica-network
     volumes:
       - backend-dbstore:/home/perplexica/data
-      - uploads:/home/perplexica/uploads
+      - ./uploads:/home/perplexica/uploads
       - ./config.toml:/home/perplexica/config.toml
     restart: unless-stopped
 
@@ -32,4 +34,6 @@ networks:
 
 volumes:
   backend-dbstore:
-  uploads:
+
+
+

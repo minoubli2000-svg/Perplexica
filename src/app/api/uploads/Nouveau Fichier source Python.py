@@ -11,10 +11,11 @@ import { Document } from 'langchain/document';
 interface FileRes {
   fileName: string;
   fileExtension: string;
-  fileId: string;
+  fileId: string; // hash sans extension
 }
 
 const uploadDir = path.join(process.cwd(), 'uploads');
+const mappingPath = path.join(uploadDir, 'mapping.json');
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -28,7 +29,6 @@ const splitter = new RecursiveCharacterTextSplitter({
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
-
     const files = formData.getAll('files') as File[];
     const embedding_model = formData.get('embedding_model');
     const embedding_model_provider = formData.get('embedding_model_provider');
@@ -56,6 +56,11 @@ export async function POST(req: Request) {
     }
 
     const processedFiles: FileRes[] = [];
+    // Charge ou prépare le mapping
+    let mapping = {};
+    if (fs.existsSync(mappingPath)) {
+      mapping = JSON.parse(fs.readFileSync(mappingPath, 'utf-8'));
+    }
 
     await Promise.all(
       files.map(async (file: any) => {
@@ -113,6 +118,9 @@ export async function POST(req: Request) {
           }),
         );
 
+        // Mise à jour du mapping global
+        mapping[file.name] = uniqueFileName.replace(/\.\w+$/, '');
+
         processedFiles.push({
           fileName: file.name,
           fileExtension: fileExtension,
@@ -120,6 +128,9 @@ export async function POST(req: Request) {
         });
       }),
     );
+
+    // Enregistre le mapping après traitement de tous les fichiers
+    fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2));
 
     return NextResponse.json({
       files: processedFiles,

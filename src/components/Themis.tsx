@@ -1,32 +1,32 @@
 'use client';
 
 // ===== IMPORTS EXHAUSTIFS =====
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useMemo,
-  useCallback,
+import React, { 
+  useState, 
+  useEffect, 
+  useRef, 
+  useMemo, 
+  useCallback, 
   useId,
-  type ChangeEvent,
+  type ChangeEvent, 
   type MouseEvent,
   type FormEvent,
-  type KeyboardEvent
+  type KeyboardEvent 
 } from 'react';
-
-import {
-  FaTimes,
-  FaMinus,
+import { 
+  FaBalanceScale, 
+  FaTimes, 
+  FaMinus, 
   FaWindowMaximize,
-  FaCopy,
-  FaMoon,
-  FaSun,
-  FaRegFilePdf,
+  FaCopy, 
+  FaMoon, 
+  FaSun, 
+  FaRegFilePdf, 
   FaFileExport,
-  FaPlus,
-  FaRegFolderOpen,
-  FaTrashAlt,
-  FaWifi,
+  FaPlus, 
+  FaRegFolderOpen, 
+  FaTrashAlt, 
+  FaWifi, 
   FaBan,
   FaUpload,
   FaDownload,
@@ -45,18 +45,11 @@ import {
   FaEyeSlash
 } from 'react-icons/fa';
 
-// **IMPORTS DE VOS COMPOSANTS**
-// Ces fichiers doivent être placés dans src/components au même niveau que Themis.tsx
-import WindowControls from './WindowControls';
-import ThemisButton from './ThemisButton';
-
-// Debug de montage
+/* Debug de montage */
 if (typeof window !== 'undefined') {
   console.log('THEMIS_TSX_FINAL_ACTIVE');
   (window as any).__THEMIS_TSX__ = true;
 }
-
-
 
 // ===== TYPES EXHAUSTIFS =====
 type ToastType = 'info' | 'success' | 'error' | 'warning';
@@ -1901,8 +1894,7 @@ export default function ThemisFinal() {
                         id: item.id || generateId(),
                         timestamp: item.timestamp || Date.now(),
                       }));
-                      setHistory([...importedHistory, ...history]);
-
+                      setHistory(prev => [...importedHistory, ...prev]);
                       add(`${importedHistory.length} éléments importés`, 'success');
                     }
                   } catch (error) {
@@ -1988,20 +1980,3 @@ export default function ThemisFinal() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

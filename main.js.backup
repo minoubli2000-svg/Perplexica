@@ -1,0 +1,104 @@
+// main.js
+
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { spawn } = require('child_process');
+const path = require('path');
+
+// ---- SCRIPTS DE LANCEMENT (optionnels, adapte selon ton stack) ----
+
+// Exemple pour lancer backend Flask via Python (hors Docker)
+function startBackend() {
+  // const backend = spawn('python', ['app.py'], {
+  //   cwd: 'C:\\Users\\inoub\\Perplexica\\backend',
+  //   detached: true,
+  //   stdio: 'ignore',
+  //   shell: true
+  // });
+  // backend.unref();
+}
+
+// Exemple pour lancer frontend Next.js/React (hors Docker)
+function startFrontend() {
+  // const frontend = spawn('npm', ['run', 'dev'], {
+  //   cwd: 'C:\\Users\\inoub\\Perplexica',
+  //   detached: true,
+  //   stdio: 'ignore',
+  //   shell: true,
+  //   env: { ...process.env, PORT: '3000' }
+  // });
+  // frontend.unref();
+}
+
+// Exemple lancement de la stack Docker (tu peux appeler startDockerStack plutôt que les deux précédents)
+function startDockerStack() {
+  // const compose = spawn('docker-compose', ['up', '--detach'], {
+  //   cwd: 'C:\\Users\\inoub\\Perplexica',
+  //   detached: true,
+  //   stdio: 'ignore',
+  //   shell: true
+  // });
+  // compose.unref();
+}
+
+// ---- FENÊTRE ELECTRON MODERNE SANS BARRE STANDARD ----
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1100,
+    minHeight: 620,
+    backgroundColor: "#20243d",
+    frame: false, // pour ajouter les boutons custom
+    resizable: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js") // si tu utilises le preload sécurisé
+    }
+  });
+
+  // Adapte l'URL ici à ton port front réel
+  win.loadURL("http://localhost:3000");
+
+  // Mémo : si ton front est démarré sur 3001, change la ligne ci-dessus par "http://localhost:3001"
+}
+
+// ---- GESTION BOUTONS PERSONNALISÉS (actions React -> Electron) ----
+ipcMain.on('window-minimize', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.minimize();
+});
+ipcMain.on('window-maximize', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.isMaximized() ? win.unmaximize() : win.maximize();
+});
+ipcMain.on('window-close', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.close();
+});
+
+// ---- LANCEMENT DE L'APP ----
+app.whenReady().then(() => {
+  // Lance tes services au besoin
+  // startDockerStack();
+  // startBackend();
+  // startFrontend();
+
+  // Délai de lancement si besoin (ex: attends 10 sec pour le front)
+  // setTimeout(createWindow, 10000);
+
+  // Ou lance direct si tes services sont déjà actifs
+  createWindow();
+
+  // Retire la barre de menu native
+  Menu.setApplicationMenu(null);
+
+  app.on('activate', function () {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on('window-all-closed', function () {
+  if (process.platform !== 'darwin') app.quit();
+});
+

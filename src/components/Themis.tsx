@@ -1,85 +1,16 @@
 'use client';
 
-// ===== IMPORTS EXHAUSTIFS =====
-import React, { 
-  useState, 
-  useEffect, 
-  useRef, 
-  useMemo, 
-  useCallback, 
-  useId,
-  type ChangeEvent, 
-  type MouseEvent,
-  type FormEvent,
-  type KeyboardEvent 
-} from 'react';
-import { 
-  FaBalanceScale, 
-  FaTimes, 
-  FaMinus, 
-  FaWindowMaximize,
-  FaCopy, 
-  FaMoon, 
-  FaSun, 
-  FaRegFilePdf, 
-  FaFileExport,
-  FaPlus, 
-  FaRegFolderOpen, 
-  FaTrashAlt, 
-  FaWifi, 
-  FaBan,
-  FaUpload,
-  FaDownload,
-  FaPlay,
-  FaEdit,
-  FaFolder,
-  FaFileAlt,
-  FaSave,
-  FaPrint,
-  FaHistory,
-  FaSearch,
-  FaFilter,
-  FaSort,
-  FaSyncAlt,
-  FaEye,
-  FaEyeSlash
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  FaBalanceScale, FaTimes, FaMinus, FaWindowMaximize, FaCopy, FaMoon, FaSun,
+  FaRegFilePdf, FaFileExport, FaPlus, FaRegFolderOpen, FaTrashAlt, FaWifi, FaBan, FaUpload
 } from 'react-icons/fa';
+import WindowControls from './WindowControls';
 
-/* Debug de montage */
-if (typeof window !== 'undefined') {
-  console.log('THEMIS_TSX_FINAL_ACTIVE');
-  (window as any).__THEMIS_TSX__ = true;
-}
 
-// ===== TYPES EXHAUSTIFS =====
-type ToastType = 'info' | 'success' | 'error' | 'warning';
-type ToastMsg = { id: number; text: string; type?: ToastType };
-type HistoryItem = { 
-  id: string;
-  q: string; 
-  a: string; 
-  doc?: string; 
-  timestamp: number;
-  model: string;
-  extractedText?: string;
-};
-type LibFile = { name: string; path?: string; size?: number; mtime?: string };
-type LibDir = { name: string; path?: string; children?: Array<LibDir | LibFile> };
-type LibRoot = { directories?: LibDir[]; files?: LibFile[] } | Record<string, any>;
-type BEFile = { name: string; size?: number };
-type BEStruct = Record<string, Record<string, BEFile[]>>;
-type Theme = 'light' | 'dark';
-type OnlineStatus = boolean;
+// ===== CONFIGURATIONS =====
 
-// ===== CONFIGURATION COMPLÈTE =====
-const API_BASE: string = 
-  process.env.NEXT_PUBLIC_API_BASE || 
-  (typeof window !== 'undefined' && (window as any).API_BASE) ||
-  'http://localhost:3001';
 
-const REQUEST_TIMEOUT_MS = 15000;
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ALLOWED_MIME_TYPES = ['application/pdf', 'text/plain', 'image/jpeg', 'image/png'];
 
 const ENGINES = [
   { value: 'perplexity', label: 'Perplexity' },
@@ -88,7 +19,7 @@ const ENGINES = [
   { value: 'gpt', label: 'GPT' },
 ];
 
-const MODEL_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
+const MODEL_OPTIONS = {
   perplexity: [
     { value: 'sonar', label: 'Sonar' },
     { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
@@ -116,1867 +47,731 @@ const ROLES = [
   { value: 'rapporteur', label: 'Rapporteur' },
 ];
 
-// ===== UTILITAIRES =====
-function toBackendModel(engine: string, model: string): string {
+// ===== Utilitaires modèle =====
+const toBackendModel = (engine, modelValue) => {
   switch (engine) {
-    case 'perplexity': return `perplexity:${model || 'sonar'}`;
-    case 'perplexica': return `perplexica:${model || 'default'}`;
-    case 'ollama': return `ollama:${model || 'llama3'}`;
-    case 'gpt': return `perplexity:${model || 'sonar'}`;
-    default: return 'general';
+    case 'perplexity':
+      return `perplexity:${modelValue || 'sonar'}`;
+    case 'perplexica':
+      return `perplexica:${modelValue || 'default'}`;
+    case 'ollama':
+      return `ollama:${modelValue || 'llama3'}`;
+    case 'gpt':
+      return `perplexity:${modelValue || 'sonar'}`;
+    default:
+      return '';
   }
-}
+};
 
-function buildUrl(path: string, params: Record<string, any> = {}) {
-  const qp = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && String(v).length) qp.set(k, String(v));
+const modelFamily = (modelString) => {
+  if (!modelString) return 'general';
+  const fam = modelString.split(':')[0];
+  return fam || 'general';
+};
+
+// ===== SERVICES API =====
+const API_BASE = 'http://localhost:3001';
+
+const askIA = async (prompt, model) => {
+  const res = await fetch(`${API_BASE}/api/ia`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, model }),
   });
-  const qs = qp.toString();
-  return `${API_BASE}${path}${qs ? `?${qs}` : ''}`;
-}
-
-function validateFile(file: File): string | null {
-  if (file.size > MAX_FILE_SIZE) {
-    return `Fichier trop volumineux (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`;
-  }
-  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-    return `Type de fichier non autorisé: ${file.type}`;
-  }
-  return null;
-}
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-// ===== CLIENT RÉSEAU SÉCURISÉ =====
-async function withTimeout(input: RequestInfo, init: RequestInit = {}, timeout = REQUEST_TIMEOUT_MS) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const url = typeof input === 'string' && input.startsWith('/') ? `${API_BASE}${input}` : (input as string);
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function fetchJson<T = any>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await withTimeout(path, init);
-  const contentType = res.headers.get('content-type') || '';
-  
-  if (!res.ok) {
-    let msg = '';
-    try {
-      msg = contentType.includes('application/json') 
-        ? JSON.stringify(await res.json()) 
-        : await res.text();
-    } catch {
-      msg = '';
-    }
-    throw new Error(msg || `HTTP ${res.status}`);
-  }
-
-  if (res.status === 204 || res.headers.get('content-length') === '0') {
-    return undefined as T;
-  }
-
-  if (!contentType.includes('application/json')) {
-    const text = await res.text().catch(() => '');
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      throw new Error('Réponse non-JSON');
-    }
-  }
-
-  return (await res.json()) as T;
-}
-
-// ===== API ENDPOINTS UNIFIÉS =====
-const IA = {
-  ask: (payload: { prompt: string; model: string }) =>
-    fetchJson<{ result: string }>('/api/ia', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
+  let j; try { j = await res.json(); } catch { j = {}; }
+  if (!res.ok) throw new Error(j.error || res.statusText || 'Erreur IA');
+  if (!j.result || !String(j.result).trim()) throw new Error('Réponse IA vide');
+  return j;
 };
 
-const Docs = {
-  generate: (payload: { question: string; response: string; model: string }) =>
-    fetchJson<{ success: boolean; filename: string }>('/api/documents/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
-  downloadUrl: (filename: string, model?: string) =>
-    buildUrl('/api/documents/download', { filename, model }),
-};
-
-const Library = {
-  structure: () => fetchJson<{ structure: BEStruct }>('/api/library/structure'),
-  extract: (file: File) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return fetchJson<{ text: string }>('/api/documents/extract', { method: 'POST', body: fd });
-  },
-  remove: (payload: { filename: string; model: string; subdir?: string | null }) =>
-    fetchJson('/api/library/delete', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
-  rename: (payload: { oldName: string; newName: string; model: string; subdir?: string | null }) =>
-    fetchJson('/api/library/rename', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
-  upload: (file: File, profile: string, category?: string) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('profile', profile);
-    fd.append('category', category || 'extraction');
-    return fetchJson('/api/upload', { method: 'POST', body: fd });
-  },
-};
-
-// ===== HOOKS UTILITAIRES =====
-function useOnlineStatus(): OnlineStatus {
-  const [online, setOnline] = useState<OnlineStatus>(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const handleOnline = () => setOnline(true);
-    const handleOffline = () => setOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  return online;
-}
-
-function useToasts() {
-  const [toasts, setToasts] = useState<ToastMsg[]>([]);
-  
-  const add = useCallback((text: string, type?: ToastType) => {
-    const id = Date.now() + Math.random();
-    setToasts(t => [...t, { id, text, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3200);
-  }, []);
-  
-  const remove = useCallback((id: number) => setToasts(t => t.filter(x => x.id !== id)), []);
-  
-  return { toasts, add, remove };
-}
-
-function useLocalStorage<T>(key: string, defaultValue: T): [T, (value: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    if (typeof window === 'undefined') return defaultValue;
-    try {
-      const stored = window.localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : defaultValue;
-    } catch {
-      return defaultValue;
-    }
+const generateDoc = async (question, answer, model) => {
+  const res = await fetch(`${API_BASE}/api/documents/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, response: answer, model }),
   });
+  let j; try { j = await res.json(); } catch { j = {}; }
+  if (!res.ok || !j.success) throw new Error(j.error || 'Erreur export');
+  if (!j.filename) throw new Error('Nom de fichier manquant');
+  return j;
+};
 
-  const setStoredValue = useCallback((newValue: T) => {
-    setValue(newValue);
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.setItem(key, JSON.stringify(newValue));
-      } catch (error) {
-        console.error('Erreur localStorage:', error);
-      }
-    }
-  }, [key]);
+const downloadDoc = (filename, model) => {
+  const url = new URL(`${API_BASE}/api/documents/download`);
+  url.searchParams.set('filename', filename);
+  if (model) url.searchParams.set('model', model);
+  window.open(url.toString(), '_blank');
+};
 
-  return [value, setStoredValue];
-}
+const libraryApi = {
+  // Récupère la structure des dossiers et fichiers de la bibliothèque documentaire
+  async getStructure() {
+    const res = await fetch(`${API_BASE}/api/library/structure`);
+    let j;
+    try { j = await res.json(); } catch { j = {}; }
+    if (!res.ok || j.error)
+      throw new Error(j.error || "Erreur récupération structure");
+    return j;
+  },
 
-// ===== COMPOSANTS UI =====
+  // Extraction OCR/texte depuis un fichier (PDF/image)
+  async extractFile(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${API_BASE}/api/documents/extract`, {
+      method: "POST",
+      body: formData
+    });
+    let j;
+    try { j = await res.json(); } catch { j = {}; }
+    if (!res.ok || j.error)
+      throw new Error(j.error || "Erreur extraction");
+    return j; // j.text contient le texte extrait !
+  },
+
+  // Suppression d’un fichier documentaire
+  async deleteFile(filename, model, subdir = null) {
+    const payload = { filename, model, subdir };
+    const res = await fetch(`${API_BASE}/api/library/delete`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    let j;
+    try { j = await res.json(); } catch { j = {}; }
+    if (!res.ok || j.error)
+      throw new Error(j.error || "Erreur suppression");
+    return j;
+  },
+
+  // Renommage d’un fichier documentaire
+  async renameFile(oldName, newName, model, subdir = null) {
+    const payload = { oldName, newName, model, subdir };
+    const res = await fetch(`${API_BASE}/api/library/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    let j;
+    try { j = await res.json(); } catch { j = {}; }
+    if (!res.ok || j.error)
+      throw new Error(j.error || "Renommage indisponible");
+    return j;
+  },
+
+  // Upload d’un fichier documentaire
+  async uploadFile(file, model, subdir) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("profile", model);
+    formData.append("category", subdir || "extraction");
+    const res = await fetch(`${API_BASE}/api/upload`, {
+      method: "POST",
+      body: formData
+    });
+    let j;
+    try { j = await res.json(); } catch { j = {}; }
+    if (!res.ok || j.error)
+      throw new Error(j.error || "Erreur upload");
+    return j;
+  }
+};
+
+
+
+
+// ===== UI Utils =====
 const Spinner = () => (
-  <div className="spinner" />
+  <span className="inline-block w-5 h-5 border-2 border-blue-500 border-r-transparent rounded-full animate-spin align-middle ml-2" />
 );
 
-const WindowControls = () => {
-  const minimize = () => {
-    try { (window as any)?.electronAPI?.minimizeWindow?.(); } catch {}
-  };
-  const maximize = () => {
-    try { (window as any)?.electronAPI?.maximizeWindow?.(); } catch {}
-  };
-  const close = () => {
-    try { (window as any)?.electronAPI?.closeWindow?.(); } catch {}
-  };
-
-  if (typeof window === 'undefined') return null;
-
-  return (
-    <div className="win-controls">
-      <button onClick={minimize} title="Minimiser"><FaMinus /></button>
-      <button onClick={maximize} title="Maximiser"><FaWindowMaximize /></button>
-      <button onClick={close} title="Fermer"><FaTimes /></button>
-    </div>
-  );
-};
-
-function ThemisButton({ 
-  icon, 
-  label, 
-  onClick, 
-  variant = 'default',
-  disabled = false,
-  loading = false,
-  className = ''
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  variant?: 'default' | 'primary' | 'danger' | 'success';
-  disabled?: boolean;
-  loading?: boolean;
-  className?: string;
-}) {
-  return (
-    <button 
-      className={`btn ${variant} ${className}`}
-      onClick={onClick}
-      disabled={disabled || loading}
-    >
-      {loading ? <Spinner /> : icon}
-      {label}
-    </button>
-  );
-}
-
-function Toast({ message, type, onClose }: { message: string; type?: ToastType; onClose: () => void }) {
+const Toast = ({ message, type, onClose }) => {
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(onClose, 3000);
     return () => clearTimeout(timer);
   }, [message, onClose]);
-
   if (!message) return null;
-
   return (
-    <div className={`toast ${type || 'info'}`} onClick={onClose}>
-      {message}
-    </div>
-  );
-}
-
-function Toasts({ items, onClose }: { items: ToastMsg[]; onClose: (id: number) => void }) {
-  return (
-    <div className="toasts">
-      {items.map(t => (
-        <Toast key={t.id} message={t.text} type={t.type} onClose={() => onClose(t.id)} />
-      ))}
-    </div>
-  );
-}
-
-function Modal({ 
-  title, 
-  onClose, 
-  children 
-}: { 
-  title: string; 
-  onClose: () => void; 
-  children: React.ReactNode 
-}) {
-  const titleId = useId();
-
-  return (
-    <div 
-      className="overlay" 
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <div
+      onClick={onClose}
+      className={`fixed top-6 right-8 z-50 flex items-center gap-3 font-medium px-5 py-3 min-w-[220px]
+        rounded-xl shadow-2xl ring-2 ring-blue-600 transition-transform cursor-pointer
+        ${type === 'error' ? 'bg-red-500' : 'bg-green-600'} text-white hover:scale-105 active:scale-95`}
     >
-      <div className="overlay-card" role="dialog" aria-labelledby={titleId}>
-        <div className="overlay-header">
-          <h3 id={titleId}>{title}</h3>
-          <button className="icon" onClick={onClose} title="Fermer">
-            <FaTimes />
-          </button>
-        </div>
-        <div className="overlay-body">
-          {children}
-        </div>
+      {type === 'error' ? '❌' : '✅'} {message}
+    </div>
+  );
+};
+
+const ProgressBar = ({ stage }) => {
+  if (!stage) return null;
+  let percent = 0;
+  if (stage.includes('Extraction en cours')) percent = 20;
+  else if (stage.includes('Interrogation IA')) percent = 70;
+  else if (stage.includes('terminée') || stage.includes('Réponse')) percent = 100;
+  return (
+    <div className="w-full mb-4">
+      <div className="flex items-center gap-2">
+        <progress value={percent} max="100" className="w-[95%] h-3 rounded-full [&::-webkit-progress-bar]:bg-gray-200 [&::-webkit-progress-value]:bg-blue-500" />
+        <span className="min-w-[38px] text-blue-400 font-bold text-sm">{percent}%</span>
+      </div>
+      <div className="text-blue-400 font-bold text-base mt-2 flex items-center gap-2 min-h-[28px]">
+        {stage}
+        {stage.includes('cours') && <Spinner />}
       </div>
     </div>
   );
-}
+};
 
-// ===== CONVERSION STRUCTURE BIBLIOTHÈQUE =====
-function mapBackendToLibRoot(be: BEStruct): LibRoot {
-  const dirs = Object.entries(be || {}).map(([profile, cats]) => ({
-    name: profile.toUpperCase(),
-    path: profile,
-    children: Object.entries(cats || {}).map(([cat, files]) => ({
-      name: cat || "(racine)",
-      path: `${profile}/${cat || ""}`,
-      children: (files || []).map(f => ({
-        name: f.name,
-        path: `${profile}/${cat || ""}/${f.name}`,
-        size: f.size,
-      })),
-    })),
-  }));
-  return { directories: dirs, files: [] };
-}
-
-// ===== COMPOSANT ARBRE =====
-function TreeNode({
-  node, 
-  depth, 
-  onSelect, 
-  selectedPath,
-}: {
-  node: any;
-  depth: number;
-  onSelect: (path: string, isFile: boolean) => void;
-  selectedPath?: string;
-}) {
-  const isDir = Array.isArray(node?.children);
-  const path = node?.path || node?.name;
-  const padding = 8 + depth * 14;
-  
+const ThemisButton = ({ children, icon, variant = 'primary', size = 'md', disabled = false, loading = false, className = '', ...props }) => {
+  const sizes = { xs: 'px-2 py-1 text-xs', sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2 text-base', lg: 'px-5 py-3 text-lg' };
+  const variants = {
+    primary: 'bg-blue-700 hover:bg-blue-800 text-white',
+    secondary: 'bg-blue-500 hover:bg-blue-600 text-white',
+    success: 'bg-green-600 hover:bg-green-700 text-white',
+    danger: 'bg-red-600 hover:bg-red-700 text-white',
+    dark: 'bg-gray-800 hover:bg-gray-900 text-gray-100',
+    outline: 'border-2 border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white',
+  };
   return (
-    <>
-      <div
-        className={`tree-node ${selectedPath === path ? 'selected' : ''}`}
-        style={{ paddingLeft: padding + 'px' }}
-        onClick={() => onSelect(path, !isDir)}
-      >
-        {isDir ? <FaFolder /> : <FaFileAlt />}
-        <span>{node?.name || node?.path}</span>
-        {node?.size && <span className="file-size">({Math.round(node.size / 1024)}KB)</span>}
-      </div>
-      {isDir && node.children?.map((ch: any, i: number) => (
-        <TreeNode
-          key={`${path || 'n'}-${i}`}
-          node={ch}
-          depth={depth + 1}
-          onSelect={onSelect}
-          selectedPath={selectedPath}
-        />
-      ))}
-    </>
+    <button
+      {...props}
+      disabled={disabled || loading}
+      className={`flex items-center justify-center gap-2 rounded-lg font-semibold border-0 shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${sizes[size]} ${variants[variant]} ${className}`}
+      type={props.type || 'button'}
+    >
+      {loading ? <Spinner /> : icon && <span>{icon}</span>}
+      {children}
+    </button>
   );
-}
+};
 
-// ===== PANNEAU BIBLIOTHÈQUE =====
-function LibraryPanel({
-  backendModel,
-  role,
-  onToast,
-  onUploadExtractToPrompt,
-  online,
-}: {
-  backendModel: string;
-  role: string;
-  onToast: (msg: string, type?: ToastType) => void;
-  onUploadExtractToPrompt: (text: string) => void;
-  online: boolean;
-}) {
-  const [structure, setStructure] = useState<LibRoot | null>(null);
+// ===== Bibliothèque =====
+const LibrarySidebar = ({ onStructureChange }) => {
+  const [structure, setStructure] = useState(null);
+  const [selectedModel, setSelectedModel] = useState('general');
   const [loading, setLoading] = useState(false);
-  const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
-  const [renameTo, setRenameTo] = useState('');
-  const [subdir, setSubdir] = useState<string | undefined>(undefined);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadModel, setUploadModel] = useState('general');
+  const [uploadSubdir, setUploadSubdir] = useState('');
+  const fileInputRef = useRef(null);
 
-  const refresh = useCallback(async () => {
-    if (!online) return;
-    setLoading(true);
+  const loadStructure = async () => {
     try {
-      const j = await Library.structure();
-      setStructure(mapBackendToLibRoot(j.structure));
-    } catch (e: any) {
-      onToast(`Structure: ${e.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [onToast, online]);
-
-  useEffect(() => { 
-    void refresh(); 
-  }, [refresh]);
-
-  const onUpload = useCallback(async (file?: File) => {
-    if (!file || !online) return;
-    
-    const validation = validateFile(file);
-    if (validation) {
-      onToast(validation, 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await Library.upload(file, role, subdir);
-      onToast('Upload réussi', 'success');
-      await refresh();
-    } catch (e: any) {
-      onToast(`Upload: ${e.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [role, subdir, refresh, onToast, online]);
-
-  const onDelete = useCallback(async () => {
-    if (!selectedPath || !online) return onToast('Aucun fichier sélectionné ou hors ligne', 'info');
-    
-    setLoading(true);
-    try {
-      await Library.remove({ 
-        filename: selectedPath.split('/').pop() || '', 
-        model: role, 
-        subdir: subdir || null 
-      });
-      onToast('Suppression réussie', 'success');
-      setSelectedPath(undefined);
-      await refresh();
-    } catch (e: any) {
-      onToast(`Suppression: ${e.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedPath, role, subdir, refresh, onToast, online]);
-
-  const onRename = useCallback(async () => {
-    if (!selectedPath || !renameTo.trim() || !online) {
-      return onToast('Sélectionnez un fichier, un nouveau nom et vérifiez la connexion', 'info');
-    }
-    
-    setLoading(true);
-    try {
-      await Library.rename({ 
-        oldName: selectedPath.split('/').pop() || '', 
-        newName: renameTo.trim(), 
-        model: role, 
-        subdir: subdir || null 
-      });
-      onToast('Renommage réussi', 'success');
-      setRenameTo('');
-      setSelectedPath(undefined);
-      await refresh();
-    } catch (e: any) {
-      onToast(`Renommage: ${e.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedPath, renameTo, role, subdir, refresh, onToast, online]);
-
-  const onExtractFromFile = useCallback(async () => {
-    if (!online) return onToast('Extraction impossible hors ligne', 'error');
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf,image/*';
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      
-      const validation = validateFile(file);
-      if (validation) {
-        onToast(validation, 'error');
-        return;
-      }
-
       setLoading(true);
-      try {
-        const j = await Library.extract(file);
-        onUploadExtractToPrompt(j.text || '');
-        onToast('Extraction réussie', 'success');
-      } catch (e: any) {
-        onToast(`Extraction: ${e.message}`, 'error');
-      } finally {
-        setLoading(false);
+      const data = await libraryApi.getStructure();
+      const struct = data?.structure || data;
+      if (struct) {
+        setStructure(struct);
+        onStructureChange?.(struct);
       }
-    };
-    input.click();
-  }, [onUploadExtractToPrompt, onToast, online]);
-
-  const handleSelect = useCallback((path: string, isFile: boolean) => {
-    if (isFile) {
-      setSelectedPath(path);
+    } catch (error) {
+      console.error('Erreur:', error);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
-  function renderRoot(root: LibRoot) {
-    const dirs: any[] = Array.isArray((root as any).directories) ? (root as any).directories : [];
-    const files: any[] = Array.isArray((root as any).files) ? (root as any).files : [];
-    const keys = Object.keys(root || {}).filter(k => !['directories','files'].includes(k));
-    
+  useEffect(() => { loadStructure(); }, []);
+
+  const handleUpload = async () => {
+    if (!uploadFile) return;
+    try {
+      setLoading(true);
+      await libraryApi.uploadFile(uploadFile, uploadModel, uploadSubdir || null);
+      setUploadFile(null);
+      setUploadSubdir('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await loadStructure();
+    } catch (error) {
+      console.error('Erreur upload:', error);
+      alert('Erreur lors de l\'upload');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (filename, model, subdir = null) => {
+    if (!confirm(`Supprimer ${filename} ?`)) return;
+    try {
+      setLoading(true);
+      await libraryApi.deleteFile(filename, model, subdir);
+      await loadStructure();
+    } catch (error) {
+      console.error('Erreur suppression:', error);
+      alert('Erreur lors de la suppression');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRename = async (filename, model, subdir = null) => {
+    const next = prompt('Nouveau nom de fichier (avec extension):', filename);
+    if (!next || next === filename) return;
+    try {
+      setLoading(true);
+      await libraryApi.renameFile(filename, next, model, subdir || null);
+      await loadStructure();
+    } catch (err) {
+      console.error('Renommage indisponible:', err);
+      alert('Renommage indisponible côté serveur. Ajouter /api/library/rename ou renommer manuellement.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderModelTree = (modelName, modelData) => {
+    const folders = typeof modelData === 'object' && !Array.isArray(modelData)
+      ? modelData
+      : { '': (modelData?.files || modelData || []) };
+
+    return Object.entries(folders).map(([subdir, files]) => (
+      <div key={subdir} className="border-l-2 border-blue-200 dark:border-blue-600 pl-3">
+        <div className="font-medium text-sm text-blue-600 dark:text-blue-400 mb-1">📂 {subdir || 'Racine'}</div>
+        <div className="space-y-1">
+          {Array.isArray(files) && files.length > 0 ? (
+            files.map(file => {
+              const name = file?.name || file;
+              const size = file?.size;
+              return (
+                <div key={name} className="flex justify-between items-center py-1 px-2 bg-white dark:bg-gray-600 rounded text-xs">
+                  <span className="flex items-center gap-1">
+                    <FaRegFilePdf className="text-red-500" />
+                    <span className="text-gray-800 dark:text-gray-200">{name}</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {size != null && <span className="text-gray-500">{Math.round(size / 1024)} KB</span>}
+                    <button onClick={() => handleRename(name, modelName, subdir || null)} className="text-blue-500 hover:text-blue-700" title="Renommer">✏️</button>
+                    <button onClick={() => handleDelete(name, modelName, subdir || null)} className="text-red-500 hover:text-red-700" title="Supprimer">
+                      <FaTrashAlt size={10} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-gray-400 italic text-xs px-2">Vide</div>
+          )}
+        </div>
+      </div>
+    ));
+  };
+
+  if (loading && !structure) {
     return (
-      <>
-        {dirs.map((d, i) => (
-          <TreeNode 
-            key={`dir-${i}`} 
-            node={d} 
-            depth={0} 
-            onSelect={handleSelect} 
-            selectedPath={selectedPath} 
-          />
-        ))}
-        {files.map((f, i) => (
-          <TreeNode 
-            key={`file-${i}`} 
-            node={f} 
-            depth={0} 
-            onSelect={handleSelect} 
-            selectedPath={selectedPath} 
-          />
-        ))}
-        {keys.map((k, i) => {
-          const val = (root as any)[k];
-          if (!val) return null;
-          if (Array.isArray(val)) {
-            return (
-              <div key={`arr-${k}-${i}`}>
-                <div className="tree-section-title">{k}</div>
-                {val.map((item: any, j: number) => (
-                  <TreeNode 
-                    key={`arr-${k}-${i}-${j}`} 
-                    node={item} 
-                    depth={1} 
-                    onSelect={handleSelect} 
-                    selectedPath={selectedPath} 
-                  />
-                ))}
-              </div>
-            );
-          }
-          if (typeof val === 'object') {
-            return (
-              <div key={`obj-${k}-${i}`}>
-                <div className="tree-section-title">{k}</div>
-                {renderRoot(val as any)}
-              </div>
-            );
-          }
-          return null;
-        })}
-      </>
+      <div className="flex flex-col h-full p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-r border-blue-200 dark:border-gray-700">
+        <div className="p-4 text-blue-600 flex items-center gap-2">
+          <Spinner /> Chargement de la bibliothèque...
+        </div>
+      </div>
     );
   }
 
   return (
-    <section className="panel">
-      <div className="panel-header">
-        <h4>Bibliothèque Documentaire</h4>
-        {!online && <FaBan className="offline-icon" title="Hors ligne" />}
-        {loading && <Spinner />}
-      </div>
+    <div className="flex flex-col h-full p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-r border-blue-200 dark:border-gray-700">
+      <h3 className="text-lg font-bold text-blue-700 dark:text-blue-300 mb-4 flex items-center gap-2">
+        <FaRegFolderOpen /> Bibliothèque Documentaire
+      </h3>
 
-      <div className="lib-actions">
-        <input 
-          type="file" 
-          onChange={(e) => onUpload(e.target.files?.[0] || undefined)}
-          disabled={!online || loading}
-        />
-        <input 
-          placeholder="Sous-dossier (extraction)" 
-          value={subdir || ''} 
-          onChange={(e) => setSubdir(e.target.value || undefined)}
-        />
-        <ThemisButton 
-          icon={<FaTrashAlt />} 
-          label="Supprimer" 
-          onClick={onDelete}
-          variant="danger"
-          disabled={!online || loading || !selectedPath}
-        />
-        <input 
-          placeholder="Nouveau nom" 
-          value={renameTo} 
-          onChange={(e) => setRenameTo(e.target.value)}
-        />
-        <ThemisButton 
-          icon={<FaEdit />} 
-          label="Renommer" 
-          onClick={onRename}
-          disabled={!online || loading || !selectedPath || !renameTo.trim()}
-        />
-        <ThemisButton 
-          icon={<FaRegFilePdf />} 
-          label="Extraire fichier" 
-          onClick={onExtractFromFile}
-          disabled={!online || loading}
-        />
-        <ThemisButton 
-          icon={<FaSyncAlt />} 
-          label="Actualiser" 
-          onClick={refresh}
-          disabled={!online || loading}
-        />
-      </div>
-
-      <div className="tree">
-        {structure ? renderRoot(structure) : (
-          loading ? 'Chargement...' : (
-            online ? 'Aucune donnée' : 'Hors ligne'
-          )
-        )}
-      </div>
-
-      <div className="selection">
-        <strong>Sélection:</strong> {selectedPath || '(rien)'}
-      </div>
-    </section>
-  );
-}
-
-// ===== OVERLAY EXTRACTION =====
-function ExtractionOverlay({
-  text,
-  onSendToIA,
-  onSendToWord,
-  onCancel,
-}: {
-  text: string;
-  onSendToIA: () => void;
-  onSendToWord: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="overlay">
-      <div className="overlay-card">
-        <div className="overlay-header">
-          <h3>Texte extrait</h3>
-          <button className="icon" onClick={onCancel}>
-            <FaTimes />
-          </button>
+      {/* Upload Section */}
+      <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className="space-y-2">
+          <select value={uploadModel} onChange={(e) => setUploadModel(e.target.value)} className="w-full px-2 py-1 text-sm border rounded bg-white dark:bg-gray-600 text-gray-800 dark:text-gray-200">
+            <option value="general">Général</option>
+            <option value="doctorant">Doctorant</option>
+            <option value="rapporteur">Rapporteur</option>
+          </select>
+          <select value={uploadSubdir} onChange={(e) => setUploadSubdir(e.target.value)} className="w-full px-2 py-1 text-sm border rounded bg-white dark:bg-gray-600 text-gray-800 dark:text-gray-200">
+            <option value="">Choisir dossier...</option>
+            <option value="extraction">Extraction</option>
+            <option value="questions_reponses">Questions/Réponses</option>
+            <option value="reponse_seule">Réponse seule</option>
+            <option value="production">Production</option>
+          </select>
+          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.txt,.json" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} className="w-full text-xs" />
+          <ThemisButton onClick={handleUpload} disabled={!uploadFile || !uploadSubdir} loading={loading} size="sm" variant="primary" icon={<FaUpload />} className="w-full">
+            Ajouter
+          </ThemisButton>
         </div>
-        <div className="overlay-body">
-          <pre className="extracted-text">{text}</pre>
-          <div className="row">
-            <ThemisButton 
-              icon={<FaPlay />} 
-              label="Envoyer à l'IA" 
-              onClick={onSendToIA}
-              variant="primary"
-            />
-            <ThemisButton 
-              icon={<FaFileExport />} 
-              label="Envoyer pour Word" 
-              onClick={onSendToWord}
-              variant="success"
-            />
-            <ThemisButton 
-              icon={<FaTimes />} 
-              label="Annuler" 
-              onClick={onCancel}
-            />
+      </div>
+
+      {/* Structure */}
+      <div className="flex-1 overflow-y-auto space-y-3">
+        {structure && Object.entries(structure).map(([modelName, modelData]) => (
+          <div key={modelName} className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
+            <div className="flex justify-between items-center mb-2">
+              <h4
+                className={`font-semibold cursor-pointer flex items-center gap-2 ${selectedModel === modelName ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300'}`}
+                onClick={() => setSelectedModel(selectedModel === modelName ? '' : modelName)}
+              >
+                📁 {modelName.toUpperCase()}
+              </h4>
+            </div>
+            {selectedModel === modelName && (
+              <div className="ml-2 space-y-2">
+                {renderModelTree(modelName, modelData)}
+              </div>
+            )}
           </div>
-        </div>
+        ))}
       </div>
+
+      <ThemisButton onClick={loadStructure} loading={loading} size="sm" variant="outline" className="mt-3">
+        🔄 Actualiser
+      </ThemisButton>
     </div>
   );
 }
 
-// ===== PANNEAU IA PRINCIPAL =====
-function IAPanel({
-  prompt,
-  setPrompt,
-  answer,
-  onAsk,
-  onExport,
-  history,
-  onDownload,
-  onReplayHistory,
-  busy,
-  showExtractOverlay,
-  extractText,
-  onOverlaySendToIA,
-  onOverlaySendToWord,
-  onOverlayCancel,
-  online,
-}: {
-  prompt: string;
-  setPrompt: (v: string) => void;
-  answer: string;
-  onAsk: () => Promise<void>;
-  onExport: () => Promise<void>;
-  history: HistoryItem[];
-  onDownload: (filename: string) => void;
-  onReplayHistory: (item: HistoryItem) => void;
-  busy: boolean;
-  showExtractOverlay: boolean;
-  extractText: string;
-  onOverlaySendToIA: () => void;
-  onOverlaySendToWord: () => void;
-  onOverlayCancel: () => void;
-  online: boolean;
-}) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+// ===== Composant principal =====
+export default function Themis() {
+  const [showLibrary, setShowLibrary] = useState(true);
+  const [theme, setTheme] = useState('dark');
+  const [libraryStructure, setLibraryStructure] = useState(null);
 
-  const copyToClipboard = useCallback(async (text: string) => {
+  const [role, setRole] = useState('general');
+  const [onlineMode, setOnlineMode] = useState('en_ligne');
+  const [engine, setEngine] = useState('perplexity');
+  const [models, setModels] = useState({
+    perplexity: MODEL_OPTIONS.perplexity[0].value,
+    perplexica: MODEL_OPTIONS.perplexica[0].value,
+    ollama: MODEL_OPTIONS.ollama[0].value,
+    gpt: MODEL_OPTIONS.gpt[0].value,
+  });
+
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [extractedText, setExtractedText] = useState('');
+  const [history, setHistory] = useState([]);
+
+  const [stage, setStage] = useState('');
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importedQ, setImportedQ] = useState('');
+  const [importedA, setImportedA] = useState('');
+  const [loadingExport, setLoadingExport] = useState(false);
+
+  const fileExtractInputRef = useRef(null);
+
+  const activeModelValue = models[engine];
+  const model = toBackendModel(engine, activeModelValue);
+
+  useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); }, [theme]);
+  useEffect(() => { if (role === 'general') setOnlineMode('en_ligne'); }, [role]);
+  useEffect(() => {
+    const availableEngines = { en_ligne: ['perplexity', 'gpt'], hors_ligne: ['ollama', 'perplexica'] };
+    if (!availableEngines[onlineMode].includes(engine)) setEngine(availableEngines[onlineMode][0]);
+  }, [onlineMode, engine]);
+
+  useEffect(() => { try { localStorage.setItem('themis-history', JSON.stringify(history)); } catch {} }, [history]);
+  useEffect(() => { try { const saved = localStorage.getItem('themis-history'); if (saved) setHistory(JSON.parse(saved)); } catch {} }, []);
+  useEffect(() => {
+    const handleKeyDown = (e) => { if ((e.key === 'Enter' && (e.ctrlKey || e.metaKey)) && question.trim()) handleAskAI(); };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [question]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const showToast = (message, type = 'success') => setToast({ message, type });
+
+  const handleClear = () => { setQuestion(''); setAnswer(''); setExtractedText(''); setStage(''); setError(''); };
+
+  const handleAskAI = async () => {
+    if (!question.trim()) return;
+    setStage('Interrogation IA en cours...');
+    setError(''); setAnswer('');
     try {
-      await navigator.clipboard.writeText(text);
-    } catch (error) {
-      console.error('Erreur copie:', error);
+      const res = await askIA(question, model);
+      if (!res.result) throw new Error('Aucune réponse reçue');
+      setAnswer(res.result);
+      setStage('Réponse reçue');
+      setHistory(prev => [{ question, answer: res.result, model }, ...prev].slice(0, 15));
+      showToast('Réponse IA reçue');
+    } catch (err) {
+      setError(`Erreur IA: ${err.message}`);
+      setStage('');
+      showToast(`Erreur IA: ${err.message}`, 'error');
     }
-  }, []);
+  };
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      if (online && !busy) {
-        onAsk();
-      }
+  const handleImportQR = () => {
+    if (!importedQ.trim() || !importedA.trim()) return showToast('Veuillez remplir les deux champs', 'error');
+    setHistory(prev => [{ question: importedQ, answer: importedA, model }, ...prev].slice(0, 15));
+    setShowImportModal(false); setImportedQ(''); setImportedA(''); showToast('Q/R importée avec succès');
+  };
+
+  const handleWordExport = async () => {
+    if (!question.trim() || !answer.trim()) return;
+    setLoadingExport(true);
+    try {
+      const { filename } = await generateDoc(question, answer, model);
+      showToast('Document Word généré');
+      downloadDoc(filename, model);
+    } catch (err) {
+      showToast(`Erreur export: ${err.message}`, 'error');
+    } finally {
+      setLoadingExport(false);
     }
-  }, [onAsk, online, busy]);
+  };
 
-  return (
-    <section className="panel main-panel">
-      <div className="panel-header">
-        <h3>Interrogation IA</h3>
-        {!online && <FaBan className="offline-icon" title="Hors ligne" />}
-        {busy && <Spinner />}
-      </div>
+  const handleCopyAnswer = async () => { if (!answer) return; try { await navigator.clipboard.writeText(answer); } catch {} };
 
-      <textarea
-        ref={textareaRef}
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Posez votre question à l'IA... (Ctrl+Entrée pour envoyer)"
-        className="area"
-        disabled={busy}
-      />
+  const handleEngineChange = (next) => {
+    setEngine(next);
+    if (!models[next]) setModels(prev => ({ ...prev, [next]: (MODEL_OPTIONS[next]?.[0]?.value || '') }));
+  };
 
-      <div className="row">
-        <ThemisButton
-          icon={<FaPlay />}
-          label="Demander"
-          onClick={onAsk}
-          variant="primary"
-          disabled={!online || busy || !prompt.trim()}
-          loading={busy}
-        />
-        <ThemisButton
-          icon={<FaFileExport />}
-          label="Exporter"
-          onClick={onExport}
-          variant="success"
-          disabled={!online || busy || !answer.trim()}
-        />
-        <ThemisButton
-          icon={<FaCopy />}
-          label="Copier prompt"
-          onClick={() => copyToClipboard(prompt)}
-          disabled={!prompt.trim()}
-        />
-      </div>
+  const safeJson = async res => {
+  const contentType = res.headers.get("content-type");
+  if (contentType && contentType.indexOf("application/json") !== -1) {
+    return await res.json();
+  } else {
+    const textErr = await res.text();
+    throw new Error(textErr);
+  }
+};
 
-      <div className="answer-panel">
-        <div className="answer-header">
-          <strong>Réponse:</strong>
-          {answer && (
-            <ThemisButton
-              icon={<FaCopy />}
-              label="Copier"
-              onClick={() => copyToClipboard(answer)}
-              className="copy-btn"
-            />
-          )}
+const handleFileExtract = async (file) => {
+  if (!file) return;
+  try {
+    showToast("Extraction du texte en cours...");
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Appel direct à l'API extraction (évite upload séparé)
+    const res = await fetch('http://localhost:3001/api/documents/extract', {
+      method: 'POST',
+      body: formData,
+    });
+    const extractJson = await safeJson(res);
+
+    if (res.ok && extractJson.text) {
+      setExtractedText(extractJson.text);
+      showToast("Texte extrait avec succès !");
+    } else {
+      showToast("Erreur extraction : " + (extractJson.error || "Inconnue"), "error");
+    }
+  } catch (e) {
+    showToast("Erreur technique : " + e.message, "error");
+  } finally {
+    if (fileExtractInputRef.current) fileExtractInputRef.current.value = "";
+  }
+};
+
+
+
+
+return (
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+      {/* Sidebar bibliothèque */}
+      {showLibrary && (
+        <aside className="flex-shrink-0 w-[340px] max-w-[380px] min-w-[260px] border-r border-blue-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+          <LibrarySidebar onStructureChange={setLibraryStructure} />
+        </aside>
+      )}
+
+      {/* Contenu principal */}
+      <main className="flex-1 flex flex-col items-stretch">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-blue-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80">
+          {/* Titre Themis avec balance blanche et bordure rouge */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded bg-transparent">
+  <FaBalanceScale className="themis-balance" />
+  <span className="themis-title">Themis</span>
+</div>
+
+
+
+
+
+          {/* Profil */}
+          <div>
+            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Profil:</label>
+            <select value={role} onChange={e => setRole(e.target.value)} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+              {ROLES.map(r => (<option key={r.value} value={r.value}>{r.label}</option>))}
+            </select>
+          </div>
+
+          {/* Mode IA */}
+          <div>
+            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Mode:</label>
+            <ThemisButton size="xs" variant={onlineMode === 'en_ligne' ? 'success' : 'outline'} disabled={role === 'general'} onClick={() => setOnlineMode('en_ligne')} className="mr-1">
+              En ligne <FaWifi />
+            </ThemisButton>
+            <ThemisButton size="xs" variant={onlineMode === 'hors_ligne' ? 'success' : 'outline'} disabled={role === 'general'} onClick={() => setOnlineMode('hors_ligne')}>
+              Hors ligne <FaBan />
+            </ThemisButton>
+          </div>
+
+          {/* Moteur */}
+          <div>
+            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Moteur:</label>
+            <select value={engine} onChange={e => handleEngineChange(e.target.value)} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+              {ENGINES.filter(e =>
+                onlineMode === 'en_ligne' ? ['perplexity', 'gpt'].includes(e.value) : ['ollama', 'perplexica'].includes(e.value)
+              ).map(option => (<option key={option.value} value={option.value}>{option.label}</option>))}
+            </select>
+          </div>
+
+          {/* Modèle */}
+          <div>
+            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Modèle:</label>
+            <select value={models[engine]} onChange={e => setModels(prev => ({ ...prev, [engine]: e.target.value }))} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+              {(MODEL_OPTIONS[engine] || []).map(m => (<option key={m.value} value={m.value}>{m.label}</option>))}
+            </select>
+          </div>
+
+          {/* Thème */}
+          <ThemisButton size="xs" variant="outline" icon={theme === 'dark' ? <FaSun /> : <FaMoon />} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="ml-auto" title="Changer le thème">
+            {theme === 'dark' ? 'Clair' : 'Sombre'}
+          </ThemisButton>
         </div>
-        <pre className="answer">{answer || 'En attente de votre question...'}</pre>
-      </div>
 
-      <div className="history-panel">
-        <div className="panel-header">
-          <h4>Historique</h4>
-          <span className="history-count">({history.length})</span>
+        {/* Progression */}
+        <div className="px-6 pt-4">
+          <ProgressBar stage={stage} />
         </div>
-        <div className="history">
-          {history.map((item) => (
-            <div key={item.id} className="card history-item">
-              <div className="history-meta">
-                <span className="timestamp">
-                  {new Date(item.timestamp).toLocaleString()}
-                </span>
-                <span className="model">{item.model}</span>
+
+        {/* Question + actions */}
+        <div className="flex flex-col gap-3 px-6 py-4">
+          <textarea
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            rows={3}
+            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500"
+            placeholder="Posez votre question à l'IA..."
+          />
+          <div className="flex flex-wrap gap-2 items-center">
+            <ThemisButton onClick={handleAskAI} disabled={!question.trim()} variant="primary" icon={<FaBalanceScale />}>
+              Poser la question
+            </ThemisButton>
+            <ThemisButton onClick={handleWordExport} disabled={!question.trim() || !answer.trim()} loading={loadingExport} variant="success" icon={<FaFileExport />}>
+              Export Word
+            </ThemisButton>
+            <ThemisButton onClick={handleCopyAnswer} disabled={!answer} variant="outline" icon={<FaCopy />}>
+              Copier
+            </ThemisButton>
+            <ThemisButton onClick={handleClear} variant="outline" icon={<FaTrashAlt />}>
+              Effacer
+            </ThemisButton>
+            <ThemisButton onClick={() => setShowImportModal(true)} variant="dark" icon={<FaPlus />}>
+              Import Q/R
+            </ThemisButton>
+
+            {/* Extraire d’un fichier */}
+            <label className="inline-flex items-center gap-2 px-3 py-2 border rounded cursor-pointer">
+              <FaRegFilePdf />
+              <span>Extraire d’un fichier</span>
+              <input
+                ref={fileExtractInputRef}
+                type="file"
+                accept=".pdf,.txt,.md,.doc,.docx"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  await handleFileExtract(f);
+                }}
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Erreurs */}
+        {error && (
+          <div className="mx-6 mb-2 p-4 bg-red-100 dark:bg-red-900/50 border-l-4 border-red-500 text-red-700 dark:text-red-300 rounded-lg">
+            <strong>Erreur:</strong> {error}
+          </div>
+        )}
+
+        {extractedText && (
+  <div className="mx-6 mb-2 p-4 bg-blue-50 dark:bg-blue-900/30 border-l-4 border-blue-500 rounded-lg">
+    <h4 className="font-semibold text-blue-700 dark:text-blue-300 mb-2">Texte extrait:</h4>
+    <pre className="whitespace-pre-wrap text-sm text-blue-800 dark:text-blue-200 max-h-32 overflow-y-auto bg-white dark:bg-gray-800 p-2 rounded">
+      {extractedText}
+    </pre>
+    <button
+      className="mt-2 px-3 py-1 bg-blue-600 text-white rounded shadow"
+      onClick={() => setQuestion(extractedText)}
+      title="Envoyer ce texte à l'IA">
+      Injecter dans l’IA
+    </button>
+  </div>
+)}
+
+
+        {/* Réponse IA */}
+        {answer && (
+          <div className="relative mx-6 mb-2 p-4 bg-green-50 dark:bg-green-900/30 border-l-4 border-green-500 rounded-lg">
+            <h4 className="font-semibold text-green-700 dark:text-green-300 mb-2">Réponse:</h4>
+            <pre className="whitespace-pre-wrap text-sm text-green-800 dark:text-green-200 max-h-64 overflow-y-auto">
+              {answer}
+            </pre>
+            <ThemisButton icon={<FaCopy />} onClick={handleCopyAnswer} size="sm" variant="outline" className="absolute top-2 right-2" title="Copier la réponse" />
+          </div>
+        )}
+
+        {/* Historique */}
+        {history.length > 0 && (
+          <div className="mx-6 mb-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+            <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Historique des conversations:</h4>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {history.slice(0, 3).map(({ question: q, answer: a }, idx) => (
+                <div key={idx} className="p-3 bg-white dark:bg-gray-700 rounded border-l-2 border-gray-300 dark:border-gray-600">
+                  <div className="text-sm">
+                    <strong className="text-blue-600 dark:text-blue-400">Q:</strong>{' '}{q}
+                  </div>
+                  <div className="text-sm mt-1">
+                    <strong className="text-green-600 dark:text-green-400">R:</strong>{' '}{(a || '').substring(0, 100)}...
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Toast */}
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
+
+        {/* Modal Import Q/R */}
+        {showImportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 min-w-[400px] max-w-[600px] border border-gray-200 dark:border-gray-700 shadow-2xl">
+              <h4 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Importer une Question/Réponse</h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Question:</label>
+                  <textarea value={importedQ} onChange={e => setImportedQ(e.target.value)} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500" rows={3} placeholder="Saisissez votre question..." />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Réponse:</label>
+                  <textarea value={importedA} onChange={e => setImportedA(e.target.value)} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500" rows={4} placeholder="Saisissez la réponse..." />
+                </div>
               </div>
-              <div className="q">
-                <span className="label">Q:</span> 
-                <span className="content">{item.q}</span>
-              </div>
-              <div className="a">
-                <span className="label">A:</span>
-                <span className="content">{item.a.substring(0, 200)}...</span>
-              </div>
-              <div className="history-actions">
-                <ThemisButton
-                  icon={<FaPlay />}
-                  label="Rejouer"
-                  onClick={() => onReplayHistory(item)}
-                  disabled={busy}
-                />
-                <ThemisButton
-                  icon={<FaCopy />}
-                  label="Copier Q"
-                  onClick={() => copyToClipboard(item.q)}
-                />
-                <ThemisButton
-                  icon={<FaCopy />}
-                  label="Copier R"
-                  onClick={() => copyToClipboard(item.a)}
-                />
-                {item.doc && (
-                  <ThemisButton
-                    icon={<FaDownload />}
-                    label="Télécharger"
-                    onClick={() => onDownload(item.doc!)}
-                  />
-                )}
+              <div className="flex gap-3 mt-6 justify-end">
+                <ThemisButton onClick={() => setShowImportModal(false)} variant="outline">Annuler</ThemisButton>
+                <ThemisButton onClick={handleImportQR} variant="success" disabled={!importedQ.trim() || !importedA.trim()}>
+                  Importer
+                </ThemisButton>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {showExtractOverlay && (
-        <ExtractionOverlay
-          text={extractText}
-          onSendToIA={onOverlaySendToIA}
-          onSendToWord={onOverlaySendToWord}
-          onCancel={onOverlayCancel}
-        />
-      )}
-    </section>
-  );
-}
-
-// ===== PANNEAU ACTIONS =====
-function ActionsPanel({
-  onOpenExtract,
-  onOpenImport,
-  onOpenExport,
-  onOpenPrint,
-  onClearHistory,
-  online,
-}: {
-  onOpenExtract: () => void;
-  onOpenImport: () => void;
-  onOpenExport: () => void;
-  onOpenPrint: () => void;
-  onClearHistory: () => void;
-  online: boolean;
-}) {
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <h3>Actions</h3>
-        {!online && <FaBan className="offline-icon" title="Hors ligne" />}
-      </div>
-
-      <div className="col actions-grid">
-        <ThemisButton
-          icon={<FaRegFilePdf />}
-          label="Extraire fichier"
-          onClick={onOpenExtract}
-          disabled={!online}
-        />
-        <ThemisButton
-          icon={<FaUpload />}
-          label="Import Q/R"
-          onClick={onOpenImport}
-        />
-        <ThemisButton
-          icon={<FaFileExport />}
-          label="Exporter production"
-          onClick={onOpenExport}
-          variant="success"
-          disabled={!online}
-        />
-        <ThemisButton
-          icon={<FaPrint />}
-          label="Imprimer"
-          onClick={onOpenPrint}
-        />
-        <ThemisButton
-          icon={<FaTrashAlt />}
-          label="Vider historique"
-          onClick={onClearHistory}
-          variant="danger"
-        />
-      </div>
-    </section>
-  );
-}
-
-// ===== COMPOSANT PRINCIPAL =====
-export default function ThemisFinal() {
-  // États principaux
-  const [engine, setEngine] = useState('perplexity');
-  const [model, setModel] = useState('sonar');
-  const [role, setRole] = useState('general');
-  const [theme, setTheme] = useLocalStorage<Theme>('themis-theme', 'light');
-
-  // États IA
-  const [prompt, setPrompt] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [history, setHistory] = useLocalStorage<HistoryItem[]>('themis-history', []);
-  const [busy, setBusy] = useState(false);
-
-  // États UI
-  const [showLibrary, setShowLibrary] = useState(true);
-  const [extractText, setExtractText] = useState('');
-  const [showExtractOverlay, setShowExtractOverlay] = useState(false);
-  const [showImport, setShowImport] = useState(false);
-  const [showExport, setShowExport] = useState(false);
-  const [showPrint, setShowPrint] = useState(false);
-
-  // Hooks
-  const online = useOnlineStatus();
-  const { toasts, add, remove } = useToasts();
-  const backendModel = useMemo(() => toBackendModel(engine, model), [engine, model]);
-
-  // Actions IA
-  const onAsk = useCallback(async () => {
-    if (!online || !prompt.trim()) return;
-    
-    setBusy(true);
-    try {
-      const { result } = await IA.ask({ prompt, model: backendModel });
-      const text = result || '';
-      setAnswer(text);
-      
-      const historyItem: HistoryItem = {
-        id: generateId(),
-        q: prompt,
-        a: text,
-        timestamp: Date.now(),
-        model: backendModel,
-      };
-      
-      setHistory(h => [historyItem, ...h]);
-      add('Réponse IA reçue', 'success');
-    } catch (e: any) {
-      setAnswer(String(e));
-      add(`IA: ${e.message}`, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }, [prompt, backendModel, add, online, setHistory]);
-
-  const onExport = useCallback(async () => {
-    if (!online || !answer.trim()) return;
-    
-    setBusy(true);
-    try {
-      const { filename } = await Docs.generate({ 
-        question: prompt, 
-        response: answer, 
-        model: role 
-      });
-      
-      const updatedHistory = history.map(item => 
-        item.q === prompt && item.a === answer && !item.doc
-          ? { ...item, doc: filename }
-          : item
-      );
-      
-      setHistory(updatedHistory);
-      add('Document exporté', 'success');
-    } catch (e: any) {
-      add(`Export: ${e.message}`, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }, [prompt, answer, role, add, online, history, setHistory]);
-
-  const onDownload = useCallback((filename: string) => {
-    const url = Docs.downloadUrl(filename, role);
-    window.open(url, '_blank');
-  }, [role]);
-
-  const onReplayHistory = useCallback((item: HistoryItem) => {
-    setPrompt(item.q);
-    setAnswer(item.a);
-  }, []);
-
-  // Actions extraction
-  const onOpenExtract = useCallback(() => {
-    if (!online) return add('Extraction impossible hors ligne', 'error');
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf,image/*';
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      
-      const validation = validateFile(file);
-      if (validation) {
-        add(validation, 'error');
-        return;
-      }
-
-      setBusy(true);
-      try {
-        const j = await Library.extract(file);
-        setExtractText(j.text || '');
-        setShowExtractOverlay(true);
-        add('Extraction réussie', 'success');
-      } catch (e: any) {
-        add(`Extraction: ${e.message}`, 'error');
-      } finally {
-        setBusy(false);
-      }
-    };
-    input.click();
-  }, [add, online]);
-
-  // Actions overlay extraction
-  const onOverlaySendToIA = useCallback(() => {
-    setPrompt(extractText || '');
-    setShowExtractOverlay(false);
-  }, [extractText]);
-
-  const onOverlaySendToWord = useCallback(async () => {
-    if (!extractText.trim() || !online) return;
-    
-    setBusy(true);
-    try {
-      const { filename } = await Docs.generate({ 
-        question: '(texte extrait)', 
-        response: extractText, 
-        model: role 
-      });
-      
-      const historyItem: HistoryItem = {
-        id: generateId(),
-        q: '(texte extrait)',
-        a: '(généré)',
-        doc: filename,
-        timestamp: Date.now(),
-        model: role,
-        extractedText: extractText,
-      };
-      
-      setHistory(h => [historyItem, ...h]);
-      add('Document Word généré', 'success');
-      setShowExtractOverlay(false);
-    } catch (e: any) {
-      add(`Génération: ${e.message}`, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }, [extractText, role, add, online, setHistory]);
-
-  const onOverlayCancel = useCallback(() => {
-    setShowExtractOverlay(false);
-  }, []);
-
-  // Actions modales
-  const onOpenImport = useCallback(() => setShowImport(true), []);
-  const onOpenExport = useCallback(() => setShowExport(true), []);
-  const onOpenPrint = useCallback(() => setShowPrint(true), []);
-  const onClearHistory = useCallback(() => {
-    setHistory([]);
-    add('Historique vidé', 'info');
-  }, [setHistory, add]);
-
-  // Fonction upload extraction vers prompt
-  const onUploadExtractToPrompt = useCallback((text: string) => {
-    setPrompt(prevPrompt => prevPrompt ? `${prevPrompt}\n\n${text}` : text);
-    add('Texte ajouté au prompt', 'info');
-  }, [add]);
-
-  // Toggle thème
-  const toggleTheme = useCallback(() => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
-  }, [setTheme]);
-
-  // Styles injectés
-  useEffect(() => {
-    const id = 'themis-final-styles';
-    if (document.getElementById(id)) return;
-    
-    const style = document.createElement('style');
-    style.id = id;
-    style.textContent = `
-      :root {
-        --bg-primary: ${theme === 'dark' ? '#0f172a' : '#ffffff'};
-        --bg-secondary: ${theme === 'dark' ? '#0b1220' : '#f8fafc'};
-        --bg-tertiary: ${theme === 'dark' ? '#111827' : '#f1f5f9'};
-        --border-color: ${theme === 'dark' ? '#1f2937' : '#e2e8f0'};
-        --text-primary: ${theme === 'dark' ? '#e5e7eb' : '#1f2937'};
-        --text-secondary: ${theme === 'dark' ? '#9ca3af' : '#64748b'};
-        --accent-primary: #3b82f6;
-        --accent-success: #16a34a;
-        --accent-danger: #dc2626;
-        --accent-warning: #d97706;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, sans-serif;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-      }
-
-      .shell {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        background: var(--bg-secondary);
-      }
-
-      .topbar, .bottombar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 8px 16px;
-        background: var(--bg-primary);
-        border-bottom: 1px solid var(--border-color);
-        color: var(--text-primary);
-      }
-
-      .bottombar {
-        border-top: 1px solid var(--border-color);
-        border-bottom: none;
-        margin-top: auto;
-      }
-
-      .brand {
-        font-weight: 700;
-        margin-right: 12px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .controls {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .controls select {
-        padding: 4px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      }
-
-      .grid {
-        display: grid;
-        grid-template-columns: 1.1fr 1fr 1.2fr;
-        gap: 16px;
-        padding: 16px;
-        flex: 1;
-        overflow: hidden;
-      }
-
-      .grid.hide-lib {
-        grid-template-columns: 0fr 1fr 1.2fr;
-      }
-
-      .panel {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 16px;
-        background: var(--bg-primary);
-        min-height: 400px;
-        overflow: hidden;
-      }
-
-      .main-panel {
-        border: 2px solid var(--accent-primary);
-      }
-
-      .panel-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-weight: 600;
-        color: var(--text-primary);
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 8px;
-      }
-
-      .offline-icon {
-        color: var(--accent-danger);
-      }
-
-      .area {
-        width: 100%;
-        min-height: 120px;
-        padding: 12px;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        font-family: inherit;
-        resize: vertical;
-      }
-
-      .area:focus {
-        outline: 2px solid var(--accent-primary);
-        outline-offset: -2px;
-      }
-
-      .answer-panel {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        flex: 1;
-      }
-
-      .answer-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-weight: 600;
-      }
-
-      .copy-btn {
-        padding: 4px 8px !important;
-        font-size: 12px;
-      }
-
-      .answer {
-        white-space: pre-wrap;
-        background: var(--bg-secondary);
-        padding: 12px;
-        border: 1px dashed var(--border-color);
-        border-radius: 8px;
-        flex: 1;
-        overflow: auto;
-        font-family: 'Monaco', 'Menlo', monospace;
-        font-size: 14px;
-        line-height: 1.5;
-      }
-
-      .history-panel {
-        max-height: 300px;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .history-count {
-        font-size: 12px;
-        color: var(--text-secondary);
-      }
-
-      .history {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        overflow-y: auto;
-        flex: 1;
-      }
-
-      .card {
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 12px;
-        background: var(--bg-secondary);
-      }
-
-      .history-item {
-        position: relative;
-      }
-
-      .history-meta {
-        display: flex;
-        justify-content: space-between;
-        font-size: 12px;
-        color: var(--text-secondary);
-        margin-bottom: 8px;
-      }
-
-      .q, .a {
-        margin: 8px 0;
-        display: flex;
-        gap: 8px;
-      }
-
-      .label {
-        font-weight: 600;
-        min-width: 20px;
-      }
-
-      .content {
-        flex: 1;
-        word-break: break-word;
-      }
-
-      .history-actions {
-        display: flex;
-        gap: 4px;
-        margin-top: 8px;
-        flex-wrap: wrap;
-      }
-
-      .history-actions .btn {
-        padding: 2px 6px;
-        font-size: 11px;
-      }
-
-      .row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
-      .col {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .actions-grid {
-        gap: 12px;
-      }
-
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 12px;
-        border: 1px solid var(--border-color);
-        background: var(--bg-secondary);
-        border-radius: 8px;
-        cursor: pointer;
-        color: var(--text-primary);
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-        text-decoration: none;
-      }
-
-      .btn:hover:not(:disabled) {
-        background: var(--bg-tertiary);
-        border-color: var(--accent-primary);
-      }
-
-      .btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .btn.primary {
-        background: var(--accent-primary);
-        border-color: var(--accent-primary);
-        color: white;
-      }
-
-      .btn.primary:hover:not(:disabled) {
-        background: #2563eb;
-      }
-
-      .btn.success {
-        background: var(--accent-success);
-        border-color: var(--accent-success);
-        color: white;
-      }
-
-      .btn.success:hover:not(:disabled) {
-        background: #15803d;
-      }
-
-      .btn.danger {
-        background: var(--accent-danger);
-        border-color: var(--accent-danger);
-        color: white;
-      }
-
-      .btn.danger:hover:not(:disabled) {
-        background: #b91c1c;
-      }
-
-      .lib-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        align-items: center;
-      }
-
-      .lib-actions input[type="file"] {
-        padding: 6px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-      }
-
-      .lib-actions input[type="text"] {
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        min-width: 120px;
-      }
-
-      .tree {
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 8px;
-        background: var(--bg-secondary);
-        flex: 1;
-        overflow: auto;
-      }
-
-      .tree-node {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 8px;
-        cursor: pointer;
-        border-radius: 6px;
-        transition: background-color 0.2s ease;
-      }
-
-      .tree-node:hover {
-        background: var(--bg-tertiary);
-      }
-
-      .tree-node.selected {
-        background: var(--accent-primary);
-        color: white;
-      }
-
-      .tree-section-title {
-        font-weight: 600;
-        margin: 8px 0 4px 0;
-        color: var(--text-secondary);
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 4px;
-      }
-
-      .file-size {
-        font-size: 11px;
-        color: var(--text-secondary);
-        margin-left: auto;
-      }
-
-      .selection {
-        margin-top: 8px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--text-secondary);
-        font-size: 14px;
-        padding: 8px;
-        background: var(--bg-secondary);
-        border-radius: 6px;
-      }
-
-      .toasts {
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        z-index: 9999;
-        max-width: 400px;
-      }
-
-      .toast {
-        padding: 12px 16px;
-        border-radius: 8px;
-        color: white;
-        background: var(--text-secondary);
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        animation: slideInRight 0.3s ease;
-        position: relative;
-      }
-
-      .toast.success {
-        background: var(--accent-success);
-      }
-
-      .toast.error {
-        background: var(--accent-danger);
-      }
-
-      .toast.warning {
-        background: var(--accent-warning);
-      }
-
-      @keyframes slideInRight {
-        from {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-
-      .spinner {
-        width: 16px;
-        height: 16px;
-        border: 2px solid var(--border-color);
-        border-top-color: var(--accent-primary);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      .win-controls {
-        display: flex;
-        gap: 4px;
-        margin-left: auto;
-      }
-
-      .win-controls button {
-        width: 32px;
-        height: 32px;
-        border: 1px solid var(--border-color);
-        background: var(--bg-secondary);
-        border-radius: 6px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-primary);
-        transition: all 0.2s ease;
-      }
-
-      .win-controls button:hover {
-        background: var(--bg-tertiary);
-      }
-
-      .icon {
-        border: none;
-        background: transparent;
-        font-size: 16px;
-        cursor: pointer;
-        color: var(--text-primary);
-        padding: 4px;
-        border-radius: 4px;
-        transition: all 0.2s ease;
-      }
-
-      .icon:hover {
-        background: var(--bg-tertiary);
-      }
-
-      .overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        backdrop-filter: blur(4px);
-      }
-
-      .overlay-card {
-        width: min(900px, 90vw);
-        max-height: 80vh;
-        background: var(--bg-primary);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
-      }
-
-      .overlay-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 12px;
-      }
-
-      .overlay-body {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        overflow: auto;
-      }
-
-      .extracted-text {
-        background: var(--bg-secondary);
-        padding: 16px;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        max-height: 400px;
-        overflow: auto;
-        font-family: 'Monaco', 'Menlo', monospace;
-        font-size: 14px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-      }
-
-      .busy {
-        opacity: 0.7;
-        pointer-events: none;
-      }
-
-      .lib-hidden {
-        display: none !important;
-      }
-
-      .theme-toggle {
-        background: none;
-        border: none;
-        color: var(--text-primary);
-        cursor: pointer;
-        padding: 8px;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-      }
-
-      .theme-toggle:hover {
-        background: var(--bg-tertiary);
-      }
-
-      @media (max-width: 1200px) {
-        .grid {
-          grid-template-columns: 1fr;
-          grid-template-rows: auto 1fr auto;
-        }
-        
-        .grid.hide-lib {
-          grid-template-columns: 1fr;
-          grid-template-rows: auto 1fr auto;
-        }
-      }
-    `;
-    
-    document.head.appendChild(style);
-  }, [theme]);
-
-  return (
-    <div className={`shell ${busy ? 'busy' : ''}`}>
-      <header className="topbar">
-        <div className="brand">
-          Themis
-          {!online && <FaBan className="offline-icon" title="Mode hors ligne" />}
-        </div>
-        
-        <div className="controls">
-          <select value={engine} onChange={(e) => setEngine(e.target.value)}>
-            {ENGINES.map(eng => (
-              <option key={eng.value} value={eng.value}>{eng.label}</option>
-            ))}
-          </select>
-          
-          <select 
-            value={model} 
-            onChange={(e) => setModel(e.target.value)}
-            disabled={!MODEL_OPTIONS[engine]?.length}
-          >
-            {(MODEL_OPTIONS[engine] || []).map(mod => (
-              <option key={mod.value} value={mod.value}>{mod.label}</option>
-            ))}
-          </select>
-          
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            {ROLES.map(r => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <button className="theme-toggle" onClick={toggleTheme} title="Changer le thème">
-          {theme === 'dark' ? <FaSun /> : <FaMoon />}
-        </button>
-
-        <button 
-          className="btn" 
-          onClick={() => setShowLibrary(v => !v)}
-          title={showLibrary ? 'Masquer la bibliothèque' : 'Afficher la bibliothèque'}
-        >
-          {showLibrary ? <FaEyeSlash /> : <FaEye />}
-        </button>
-
-        <WindowControls />
-      </header>
-
-      <main className={`grid ${showLibrary ? '' : 'hide-lib'}`}>
-        <div style={{ display: showLibrary ? 'block' : 'none' }}>
-          <LibraryPanel
-            backendModel={backendModel}
-            role={role}
-            onToast={add}
-            onUploadExtractToPrompt={onUploadExtractToPrompt}
-            online={online}
-          />
-        </div>
-
-        <IAPanel
-          prompt={prompt}
-          setPrompt={setPrompt}
-          answer={answer}
-          onAsk={onAsk}
-          onExport={onExport}
-          history={history}
-          onDownload={onDownload}
-          onReplayHistory={onReplayHistory}
-          busy={busy}
-          showExtractOverlay={showExtractOverlay}
-          extractText={extractText}
-          onOverlaySendToIA={onOverlaySendToIA}
-          onOverlaySendToWord={onOverlaySendToWord}
-          onOverlayCancel={onOverlayCancel}
-          online={online}
-        />
-
-        <ActionsPanel
-          onOpenExtract={onOpenExtract}
-          onOpenImport={onOpenImport}
-          onOpenExport={onOpenExport}
-          onOpenPrint={onOpenPrint}
-          onClearHistory={onClearHistory}
-          online={online}
-        />
+          </div>
+        )}
       </main>
 
-      <footer className="bottombar">
-        <div>API: {API_BASE}</div>
-        <div>Statut: {online ? '🟢 En ligne' : '🔴 Hors ligne'}</div>
-        <div>Profil: {role}</div>
-        <div>Modèle: {backendModel}</div>
-      </footer>
-
-      {/* Modales */}
-      {showImport && (
-        <Modal title="Import Q/R" onClose={() => setShowImport(false)}>
-          <p>Choisir un fichier JSON contenant des questions/réponses pour alimenter l'historique.</p>
-          <input
-            type="file"
-            accept=".json"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  try {
-                    const content = event.target?.result as string;
-                    const data = JSON.parse(content);
-                    if (Array.isArray(data)) {
-                      const importedHistory = data.map(item => ({
-                        ...item,
-                        id: item.id || generateId(),
-                        timestamp: item.timestamp || Date.now(),
-                      }));
-                      setHistory(prev => [...importedHistory, ...prev]);
-                      add(`${importedHistory.length} éléments importés`, 'success');
-                    }
-                  } catch (error) {
-                    add('Erreur lors de l\'import', 'error');
-                  }
-                };
-                reader.readAsText(file);
-              }
-              setShowImport(false);
-            }}
-          />
-        </Modal>
-      )}
-
-      {showExport && (
-        <Modal title="Export production" onClose={() => setShowExport(false)}>
-          <p>Exporter l'historique des conversations en JSON.</p>
-          <div className="row">
-            <ThemisButton
-              icon={<FaDownload />}
-              label="Exporter JSON"
-              onClick={() => {
-                const dataStr = JSON.stringify(history, null, 2);
-                const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `themis-export-${new Date().toISOString().split('T')[0]}.json`;
-                link.click();
-                URL.revokeObjectURL(url);
-                setShowExport(false);
-              }}
-              variant="success"
-            />
-            <ThemisButton
-              icon={<FaTimes />}
-              label="Fermer"
-              onClick={() => setShowExport(false)}
-            />
-          </div>
-        </Modal>
-      )}
-
-      {showPrint && (
-        <Modal title="Imprimer" onClose={() => setShowPrint(false)}>
-          <p>Préparer l'impression du dernier échange ou de l'historique complet.</p>
-          <div className="row">
-            <ThemisButton
-              icon={<FaPrint />}
-              label="Imprimer historique"
-              onClick={() => {
-                const printContent = history.map(item => 
-                  `Q: ${item.q}\nR: ${item.a}\n${'='.repeat(50)}\n`
-                ).join('\n');
-                
-                const printWindow = window.open('', '_blank');
-                if (printWindow) {
-                  printWindow.document.write(`
-                    <html>
-                      <head><title>Historique Themis</title></head>
-                      <body>
-                        <h1>Historique des conversations Themis</h1>
-                        <pre>${printContent}</pre>
-                      </body>
-                    </html>
-                  `);
-                  printWindow.document.close();
-                  printWindow.print();
-                }
-                setShowPrint(false);
-              }}
-            />
-            <ThemisButton
-              icon={<FaTimes />}
-              label="Fermer"
-              onClick={() => setShowPrint(false)}
-            />
-          </div>
-        </Modal>
-      )}
-
-      <Toasts items={toasts} onClose={remove} />
+      {/* Sidebar droite */}
+      <aside className="flex flex-col flex-1 max-w-[270px] min-w-[200px] bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-l border-blue-200 dark:border-gray-700 py-6 px-4 space-y-4">
+        <ThemisButton className="w-full" icon={<FaRegFolderOpen />} onClick={() => setShowLibrary(!showLibrary)} variant="dark">
+          {showLibrary ? 'Masquer' : 'Afficher'} Bibliothèque
+        </ThemisButton>
+        <h3 className="text-lg font-bold text-center text-blue-700 dark:text-blue-300">Configuration IA</h3>
+        <div className="pt-4 border-t border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+          <div>Engine: <strong>{engine}</strong></div>
+          <div>Model: <strong>{models[engine]}</strong></div>
+          <div>Role: <strong>{role}</strong></div>
+          <div>Historique: <strong>{history.length}</strong> entrées</div>
+        </div>
+      </aside>
     </div>
   );
 }

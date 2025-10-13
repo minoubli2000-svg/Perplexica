@@ -1,23 +1,21 @@
-import ChatWindow from '@/components/ChatWindow';
-import { ChatProvider } from '@/lib/hooks/useChat';
-import { Metadata } from 'next';
-import { Suspense } from 'react';
+'use client';
+import dynamic from 'next/dynamic';
 
-export const metadata: Metadata = {
-  title: 'Chat - Perplexica',
-  description: 'Chat with the internet, chat with Perplexica.',
-};
-
-const Home = () => {
-  return (
-    <div>
-      <Suspense>
-        <ChatProvider>
-          <ChatWindow />
-        </ChatProvider>
-      </Suspense>
+const Themis = dynamic(() => import('../components/Themis.tsx'), { 
+  ssr: false,
+  loading: () => (
+    <div className="h-screen flex items-center justify-center bg-gray-900">
+      <div className="text-center text-red-600">
+        <div className="text-6xl mb-4">⚖️</div>
+        <div className="text-xl">Chargement de Thémis...</div>
+      </div>
     </div>
-  );
-};
+  )
+});
 
-export default Home;
+export default function Home() {
+  return <Themis />;
+}
+
+
+

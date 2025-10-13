@@ -1,0 +1,121 @@
+diff --git a/src/components/Themis.tsx b/src/components/Themis.tsx
+index 1234567..abcdef0 100644
+--- a/src/components/Themis.tsx
++++ b/src/components/Themis.tsx
+@@ -1,6 +1,15 @@
+-'use client';
++// === Version finale complète avec panneau Bibliothèque autonome ===
++'use client';
++
++import React, 
++  { useState, useEffect, useCallback, useMemo } 
++  from 'react';
++import { 
++  FaRegFolderOpen, FaEye, FaEyeSlash, FaSyncAlt,
++  FaTrashAlt, FaRegFilePdf 
++} from 'react-icons/fa';
+ import ThemisButton from './ThemisButton';
+ import WindowControls from './WindowControls';
+@@ -50,6 +59,20 @@ const Themis: React.FC = () => {
+   const [history, setHistory] = useState<any[]>([]);
+   const [busy, setBusy] = useState(false);
+
++  // État d’affichage du panneau Bibliothèque
++  const [showLibrary, setShowLibrary] = useState(true);
++
++  // Chargement de la structure de la bibliothèque
++  const loadLibraryStructure = useCallback(async () => {
++    if (!navigator.onLine) return;
++    const res = await fetch('/api/library/structure');
++    if (!res.ok) throw new Error(await res.text());
++    return res.json();
++  }, []);
++
++  // Suppression d’un fichier dans la bibliothèque
++  const deleteLibraryFile = useCallback(async (filename: string) => {
++    const res = await fetch('/api/library/delete', {
++      method: 'DELETE',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ filename })
++    });
++    if (!res.ok) throw new Error(await res.text());
++  }, []);
+@@ -200,6 +223,48 @@ return (
+      {/* Panneau principal d’interrogation IA */}
+      <section className="panel main-panel">
+        {/* … votre contenu existant … */}
++
++       {/* === Panneau Bibliothèque autonome === */}
++       {showLibrary && (
++         <section className="panel library-panel">
++           <div className="panel-header">
++             <FaRegFolderOpen />
++             <span>Bibliothèque Documentaire</span>
++             <ThemisButton
++               icon={FaEyeSlash}
++               label="Masquer bibliothèque"
++               onClick={() => setShowLibrary(false)}
++               variant="secondary"
++               size="small"
++             />
++           </div>
++
++           {/* Contrôles Profil, Catégorie, Fichiers */}
++           <div className="lib-controls">
++             {/* … insérez ici vos <select> pour profil, catégorie, fichier … */}
++           </div>
++
++           {/* Actions sur fichiers */}
++           <div className="lib-actions">
++             <ThemisButton
++               icon={FaTrashAlt}
++               label="Supprimer"
++               disabled={!selectedFile}
++               onClick={async () => {
++                 try {
++                   await deleteLibraryFile(selectedFile);
++                   const updated = await loadLibraryStructure();
++                   setLibraryStructure(updated);
++                   addToast('Fichier supprimé', 'success');
++                 } catch (e: any) {
++                   addToast(`Erreur : ${e.message}`, 'error');
++                 }
++               }}
++             />
++             <ThemisButton
++               icon={FaRegFilePdf}
++               label="Extraire"
++               disabled={!selectedFile}
++               onClick={() => addToast('Extraction non implémentée', 'warning')}
++             />
++             <ThemisButton
++               icon={FaSyncAlt}
++               label="Actualiser"
++               onClick={async () => {
++                 const updated = await loadLibraryStructure();
++                 setLibraryStructure(updated);
++               }}
++             />
++           </div>
++         </section>
++       )}
+@@ -250,6 +315,18 @@ return (
+      {/* Panneau Actions existant */}
+      <ActionsPanel
+        onShowLibrary={() => setShowLibrary(true)}
++         /* ajoutez ceci pour rouvrir la bibliothèque */
+      />
+
++     {/* === Bouton “Afficher bibliothèque” dans le panneau Actions === */}
++     <ActionsPanel>
++       {/* … votre contenu d’Actions existant … */}
++       <ThemisButton
++         icon={FaEye}
++         label="Afficher bibliothèque"
++         size="small"
++         onClick={() => setShowLibrary(true)}
++       />
++     </ActionsPanel>
+    </main>
+    <footer className="bottombar">
+      {/* … */}

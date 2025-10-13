@@ -1,0 +1,743 @@
+
+'use client';
+if (typeof window!=='undefined'){ console.log('THEMIS_TSX_ACTIVE'); (window as any).__THEMIS_TSX__=true; }
+// Wrappers fenêtre Electron (TS-safe)
+const ThWin = {
+  minimize: () => { try { (window as any)?.electronAPI?.minimizeWindow?.(); } catch {} },
+  maximize: () => { try { (window as any)?.electronAPI?.maximizeWindow?.(); } catch {} },
+  close:    () => { try { (window as any)?.electronAPI?.closeWindow?.(); }    catch {} },
+};
+async function getStructure(): Promise<any> {
+  const res = await fetch((API_BASE || "") + "/api/library/structure");
+  if (!res.ok) { throw new Error("structure " + res.status); }
+  const j = await res.json();
+  return (j && (j as any).structure) ? (j as any).structure : j;
+}
+
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+
+/* ===== Config & runtime (externalisée, sans URL en dur) ===== */
+const API_BASE: string =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE) ||
+  (typeof window !== 'undefined' && (window as any).__API_BASE__) ||
+  (typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NEXT_PUBLIC_API_BASE) ||
+  'http://localhost:3001';
+
+
+
+const REQUEST_TIMEOUT_MS = 15000;
+
+const isElectron =
+  typeof window !== 'undefined' &&
+  !!(window as any).process &&
+  (window as any).process.type === 'renderer';
+
+/* ===== Modèles & moteurs (parité logique, adapter si besoin) ===== */
+const ENGINES = [
+  { value: 'perplexity', label: 'Perplexity' },
+  { value: 'perplexica', label: 'Perplexica' },
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'gpt', label: 'GPT' },
+];
+
+const MODEL_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
+  perplexity: [{ value: 'sonar', label: 'Sonar' }],
+  gpt: [{ value: 'gpt-5', label: 'GPT‑5' }],
+  ollama: [],
+  perplexica: [],
+};
+
+const ROLES = [
+  { value: 'general', label: 'Général' },
+  { value: 'doctorant', label: 'Doctorant' },
+  { value: 'rapporteur', label: 'Rapporteur' },
+];
+
+function toBackendModel(engine: string, model: string): string {
+  return `${engine}:${model}`;
+}
+
+/* ===== Client réseau (timeout + JSON strict) ===== */
+async function withTimeout(input: RequestInfo, init: RequestInit = {}, timeout = REQUEST_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const url = typeof input === 'string' && input.startsWith('/') ? `${API_BASE}${input}` : (input as string);
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+async function fetchJson<T = any>(path: string, init: RequestInit = {}) {
+  const res = await withTimeout(path, init);
+  const contentType = res.headers.get('content-type') || '';
+
+  if (!res.ok) {
+    let msg = '';
+    try {
+      msg = contentType.includes('application/json')
+        ? JSON.stringify(await res.json())
+        : await res.text();
+    } catch {
+      msg = '';
+    }
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
+
+  // Réponses sans contenu
+  if (res.status === 204 || res.headers.get('content-length') === '0') {
+    return undefined as T;
+  }
+
+  if (!contentType.includes('application/json')) {
+    // Tolérance: renvoyer texte brut si nécessaire
+    const text = await res.text().catch(() => '');
+    try {
+      return JSON.parse(text) as T; // si c’est du JSON sans header correct
+    } catch {
+      throw new Error('Réponse non‑JSON');
+    }
+  }
+
+  return (await res.json()) as T;
+}
+
+
+/* ===== Endpoints unifiés ===== */
+const IA = {
+  ask: (payload: { prompt: string; model: string }) =>
+    fetchJson<{ result: string }>('/api/ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+};
+const Docs = {
+  generate: (payload: { question: string; response: string; model: string }) =>
+    fetchJson<{ success: boolean; filename: string }>('/api/documents/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  downloadUrl: (filename: string, model?: string) =>
+    buildUrl('/api/documents/download', { filename, model }),
+};
+const Library = {
+  structure: () => fetchJson<LibRoot>('/api/library/structure'),
+  extract: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetchJson<{ text: string }>('/api/documents/extract', { method: 'POST', body: fd });
+  },
+  remove: (payload: { filename: string; model: string; subdir?: string | null }) =>
+    fetchJson('/api/library/delete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  rename: (payload: { oldName: string; newName: string; model: string; subdir?: string | null }) =>
+    fetchJson('/api/library/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  upload: (file: File, model: string, subdir?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('model', model);
+    fd.append('subdir', subdir || 'extraction');
+    return fetchJson('/api/upload', { method: 'POST', body: fd });
+  },
+};
+
+/* ===== UI: Contrôles de fenêtre (Electron) ===== */
+function WindowControls() {
+  if (typeof window === 'undefined') return null;
+  return (
+    <div className="win-controls">
+      <button onClick={() => ThWin.minimize()}>−</button>
+      <button onClick={() => ThWin.maximize()}>◻</button>
+      <button onClick={() => ThWin.close()}>×</button>
+    </div>
+  );
+}
+
+
+/* ===== Types bibliothèque ===== */
+type BEFile = { name: string; size?: number };
+type BEStruct = Record<string, Record<string, BEFile[]>>;
+
+// Convertit { profile: { cat: [{name}] } } en LibRoot { directories:[{children:[{children:files}]}] }
+function mapBackendToLibRoot(be: BEStruct): any {
+  const dirs = Object.entries(be || {}).map(([profile, cats]) => ({
+    name: profile.toUpperCase(),
+    path: profile,
+    children: Object.entries(cats || {}).map(([cat, files]) => ({
+      name: cat || "(racine)",
+      path: `${profile}/${cat || ""}`,
+      children: (files || []).map(f => ({
+        name: f.name,
+        path: `${profile}/${cat || ""}/${f.name}`,
+      })),
+    })),
+  }));
+  return { directories: dirs, files: [] };
+}
+type LibFile = { name: string; path?: string; size?: number; mtime?: string };
+type LibDir = { name: string; path?: string; children?: Array<LibDir | LibFile> };
+type LibRoot = { directories?: LibDir[]; files?: LibFile[] } | Record<string, any>;
+
+/* ===== Panneau 1: Bibliothèque ===== */
+function TreeNode({
+  node, depth, onSelect, selectedPath,
+}: {
+  node: LibDir | LibFile;
+  depth: number;
+  onSelect: (path: string, isFile: boolean) => void;
+  selectedPath?: string;
+}) {
+  const isDir = (node as LibDir).children !== undefined || (node as any).type === 'dir';
+  const path = (node as any).path || (node as any).name;
+  const padding = 8 + depth * 14;
+  return (
+    <div
+      className={`tree-node ${selectedPath === path ? 'selected' : ''}`}
+      style={{ paddingLeft: `${padding}px` }}
+      onClick={() => onSelect(path, !isDir)}
+    >
+      <span className="icon">{isDir ? '📂' : '📄'}</span>
+      <span className="label">{(node as any).name || (node as any).path}</span>
+      {'children' in (node as any) && (node as LibDir).children?.map((ch, i) => (
+        <TreeNode key={i} node={ch} depth={depth + 1} onSelect={onSelect} selectedPath={selectedPath} />
+      ))}
+    </div>
+  );
+}
+function LibraryPanel({
+  backendModel, onToast,
+}: {
+  backendModel: string;
+  onToast: (msg: string, type?: 'info' | 'success' | 'error') => void;
+}) {
+  const [structure, setStructure] = useState<LibRoot | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
+  const [renameTo, setRenameTo] = useState('');
+  const [subdir, setSubdir] = useState<string | undefined>(undefined);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const j = await Library.structure();
+      setStructure(mapBackendToLibRoot((j as any).structure));
+    } catch (e: any) {
+      onToast(`Structure: ${e.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [onToast]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const onUpload = useCallback(async (file?: File) => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      await Library.upload(file, backendModel, subdir);
+      onToast('Upload réussi', 'success');
+      await refresh();
+    } catch (e: any) {
+      onToast(`Upload: ${e.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [backendModel, subdir, refresh, onToast]);
+
+  const onDelete = useCallback(async () => {
+    if (!selectedPath) return onToast('Aucun fichier sélectionné', 'info');
+    setLoading(true);
+    try {
+      await Library.remove({ filename: selectedPath, model: backendModel, subdir: subdir || null });
+      onToast('Suppression réussie', 'success');
+      setSelectedPath(undefined);
+      await refresh();
+    } catch (e: any) {
+      onToast(`Suppression: ${e.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedPath, backendModel, subdir, refresh, onToast]);
+
+  const onRename = useCallback(async () => {
+    if (!selectedPath || !renameTo.trim()) return onToast('Sélectionnez un fichier et un nouveau nom', 'info');
+    setLoading(true);
+    try {
+      await Library.rename({ oldName: selectedPath, newName: renameTo.trim(), model: backendModel, subdir: subdir || null });
+      onToast('Renommage réussi', 'success');
+      setRenameTo('');
+      setSelectedPath(undefined);
+      await refresh();
+    } catch (e: any) {
+      onToast(`Renommage: ${e.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedPath, renameTo, backendModel, subdir, refresh, onToast]);
+
+  const onSelect = useCallback((path: string) => setSelectedPath(path), []);
+
+  function renderRoot(root: LibRoot) {
+    const dirs: LibDir[] = Array.isArray((root as any).directories) ? (root as any).directories : [];
+    const files: LibFile[] = Array.isArray((root as any).files) ? (root as any).files : [];
+    const keys = Object.keys(root || {}).filter(k => !['directories', 'files'].includes(k));
+    return (
+      <>
+        {dirs.map((d, i) => <TreeNode key={`d-${i}`} node={d} depth={0} onSelect={onSelect} selectedPath={selectedPath} />)}
+        {files.map((f, i) => <TreeNode key={`f-${i}`} node={f} depth={0} onSelect={onSelect} selectedPath={selectedPath} />)}
+        {keys.map((k, i) => {
+          const val = (root as any)[k];
+          if (!val) return null;
+          if (Array.isArray(val)) {
+            return (
+              <div key={`k-${i}`}>
+                <div className="tree-node key">{k}</div>
+                {val.map((item: any, j: number) => <TreeNode key={`k-${i}-${j}`} node={item} depth={1} onSelect={onSelect} selectedPath={selectedPath} />)}
+              </div>
+            );
+          }
+          if (typeof val === 'object') {
+            return <TreeNode key={`k-${i}`} node={{ name: k, children: (val.children || val.files || val.directories || []) } as any} depth={0} onSelect={onSelect} selectedPath={selectedPath} />;
+          }
+          return null;
+        })}
+      </>
+    );
+  }
+
+  return (
+    <section className="panel lib">
+      <div className="panel-header"><span>📚</span><h3>Bibliothèque</h3>{loading && <span className="spinner" />}</div>
+
+      <div className="lib-actions">
+        <label className="btn">
+          <input type="file" hidden onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
+          Importer
+        </label>
+        <button className="btn danger" onClick={onDelete}>Supprimer</button>
+        <div className="rename">
+          <input value={renameTo} onChange={(e) => setRenameTo(e.target.value)} placeholder="Nouveau nom" />
+          <button className="btn" onClick={onRename}>Renommer</button>
+        </div>
+        <input value={subdir || ''} onChange={(e) => setSubdir(e.target.value || undefined)} placeholder="Sous‑dossier (optionnel)" />
+        <button className="btn" onClick={() => void refresh()}>Actualiser</button>
+      </div>
+
+      <div className="tree">
+        {structure ? renderRoot(structure) : <div className="empty">Aucune donnée</div>}
+      </div>
+
+      <div className="selection">
+        <span>📖</span> Sélection: {selectedPath || '—'}
+      </div>
+    </section>
+  );
+}
+
+/* ===== Panneau 2: Interrogation IA + Overlay d’extraction ===== */
+function ExtractionOverlay({
+  text, onSendToIA, onSendToWord, onCancel,
+}: {
+  text: string;
+  onSendToIA: () => void;
+  onSendToWord: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="overlay">
+      <div className="overlay-card">
+        <div className="overlay-header">
+          <h4>Texte extrait</h4>
+          <button className="icon" onClick={onCancel}>×</button>
+        </div>
+        <textarea readOnly className="area" value={text} />
+        <div className="row">
+          <button className="btn" onClick={onSendToIA}>Envoyer à l’IA</button>
+          <button className="btn" onClick={onSendToWord}>Envoyer pour Word</button>
+          <button className="btn danger" onClick={onCancel}>Annuler</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type HistoryItem = { q: string; a: string; doc?: string };
+function IAPanel({
+  prompt, setPrompt, answer, onAsk, onExport, history, onDownload, busy, showExtractOverlay, extractText,
+  onOverlaySendToIA, onOverlaySendToWord, onOverlayCancel,
+}: {
+  prompt: string;
+  setPrompt: (v: string) => void;
+  answer: string;
+  onAsk: () => Promise<void>;
+  onExport: () => Promise<void>;
+  history: HistoryItem[];
+  onDownload: (filename: string) => void;
+  busy: boolean;
+  showExtractOverlay: boolean;
+  extractText: string;
+  onOverlaySendToIA: () => void;
+  onOverlaySendToWord: () => void;
+  onOverlayCancel: () => void;
+}) {
+  return (
+    <section className="panel">
+      <h3>Interrogation IA</h3>
+      <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Posez une question..." className="area" />
+      <div className="row">
+        <button onClick={onAsk} disabled={!prompt.trim() || busy}>Demander</button>
+        <button onClick={onExport} disabled={!answer.trim() || busy}>Exporter</button>
+      </div>
+      <pre className="answer">{answer}</pre>
+
+      <div className="panel-header"><h4>Historique</h4></div>
+      <div className="history">
+        {history.map((it, i) => (
+          <div key={i} className="card">
+            <div className="q"><span>Q:</span> {it.q}</div>
+            <div className="a"><span>A:</span> {it.a}</div>
+            {it.doc && <button className="btn" onClick={() => onDownload(it.doc!)}>Télécharger</button>}
+          </div>
+        ))}
+      </div>
+
+      {showExtractOverlay && (
+        <ExtractionOverlay
+          text={extractText}
+          onSendToIA={onOverlaySendToIA}
+          onSendToWord={onOverlaySendToWord}
+          onCancel={onOverlayCancel}
+        />
+      )}
+    </section>
+  );
+}
+
+/* ===== Panneau 3: Actions (ouvre fenêtres flottantes) ===== */
+function ActionsPanel({
+  onOpenExtract, onOpenImport, onOpenExport, onOpenPrint,
+}: {
+  onOpenExtract: () => void;
+  onOpenImport: () => void;
+  onOpenExport: () => void;
+  onOpenPrint: () => void;
+}) {
+  return (
+    <section className="panel">
+      <h3>Actions</h3>
+      <div className="col">
+        <button className="btn" onClick={onOpenImport}>Importer Q/R</button>
+        <button className="btn" onClick={onOpenExport}>Exporter production</button>
+        <button className="btn" onClick={onOpenPrint}>Imprimer</button>
+        <button className="btn" onClick={onOpenExtract}>Extraire PDF</button>
+      </div>
+    </section>
+  );
+}
+
+/* ===== Modales flottantes: Import/Export/Imprimer ===== */
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const titleId = React.useId();
+  return (
+    <div className="overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="overlay-card" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+        <div className="overlay-header">
+          <h4 id={titleId}>{title}</h4>
+          <button className="icon" onClick={onClose} aria-label="Fermer">×</button>
+        </div>
+        <div className="overlay-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ===== Toast ultra-léger ===== */
+type ToastMsg = { id: number; text: string; type?: 'info' | 'success' | 'error' };
+
+function useToasts() {
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+  const add = useCallback((text: string, type?: ToastMsg['type']) => {
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t, { id, text, type }]);
+    setTimeout(() => setToasts((t) => t.filter(x => x.id !== id)), 3200);
+  }, []);
+  const remove = useCallback((id: number) => setToasts((t) => t.filter(x => x.id !== id)), []);
+  return { toasts, add, remove };
+}
+
+function Toasts({ items, onClose }: { items: ToastMsg[]; onClose: (id: number) => void }) {
+  return (
+    <div className="toasts">
+      {items.map(t => (
+        <div key={t.id} className={`toast ${t.type || 'info'}`} onClick={() => onClose(t.id)}>
+          {t.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+/* ===== Composant principal ===== */
+export default function ThemisOneScript() {
+  const [engine, setEngine] = useState('perplexity');
+  const [model, setModel] = useState('sonar');
+  const [role, setRole] = useState('general');
+
+  const [prompt, setPrompt] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const [showLibrary, setShowLibrary] = useState(true);
+
+  const [extractText, setExtractText] = useState('');
+  const [showExtractOverlay, setShowExtractOverlay] = useState(false);
+
+  const [showImport, setShowImport] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [showPrint, setShowPrint] = useState(false);
+
+  const { toasts, add, remove } = useToasts();
+
+  const backendModel = useMemo(() => toBackendModel(engine, model), [engine, model]);
+
+  const onAsk = useCallback(async () => {
+    setBusy(true);
+    try {
+      const { result } = await IA.ask({ prompt, model: backendModel });
+      const text = result || '';
+      setAnswer(text);
+      setHistory((h) => [{ q: prompt, a: text }, ...h]);
+      add('Réponse IA reçue', 'success');
+    } catch (e: any) {
+      setAnswer(String(e));
+      add(`IA: ${e.message}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }, [prompt, backendModel, add]);
+
+  const onExport = useCallback(async () => {
+    setBusy(true);
+    try {
+      const { filename } = await Docs.generate({ question: prompt, response: answer, model: backendModel });
+      setHistory((h) => [{ q: prompt, a: answer, doc: filename }, ...h]);
+      add('Document exporté', 'success');
+    } catch (e: any) {
+      add(`Export: ${e.message}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }, [prompt, answer, backendModel, add]);
+
+  const onDownload = useCallback((filename: string) => {
+    const url = Docs.downloadUrl(filename, backendModel);
+    window.open(url, '_blank');
+  }, [backendModel]);
+
+  // Ouvrir l’overlay d’extraction depuis P3
+  const onOpenExtract = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,image/*';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setBusy(true);
+      try {
+        const j = await Library.extract(file);
+        setExtractText(j.text || '');
+        setShowExtractOverlay(true);
+        add('Extraction réussie', 'success');
+      } catch (e: any) {
+        add(`Extraction: ${e.message}`, 'error');
+      } finally {
+        setBusy(false);
+      }
+    };
+    input.click();
+  }, [add]);
+
+  // Actions de la fenêtre flottante d’extraction
+  const onOverlaySendToIA = useCallback(() => {
+    setPrompt(extractText || '');
+    setShowExtractOverlay(false);
+  }, [extractText]);
+  const onOverlaySendToWord = useCallback(async () => {
+    if (!extractText.trim()) return;
+    setBusy(true);
+    try {
+      const { filename } = await Docs.generate({ question: '(texte extrait)', response: extractText, model: backendModel });
+      setHistory((h) => [{ q: '(texte extrait)', a: '(généré)', doc: filename }, ...h]);
+      add('Document Word en préparation', 'success');
+      setShowExtractOverlay(false);
+    } catch (e: any) {
+      add(`Génération: ${e.message}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }, [extractText, backendModel, add]);
+  const onOverlayCancel = useCallback(() => setShowExtractOverlay(false), []);
+
+  // Modales P3
+  const onOpenImport = useCallback(() => setShowImport(true), []);
+  const onOpenExport = useCallback(() => setShowExport(true), []);
+  const onOpenPrint = useCallback(() => setShowPrint(true), []);
+
+  // Styles inline pour un copier‑coller autonome
+  useEffect(() => {
+    const id = 'themis-one-styles';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `
+      .shell { display:flex; flex-direction:column; height:100%; font-family:system-ui, sans-serif; }
+      .topbar, .bottombar { display:flex; align-items:center; gap:12px; padding:8px 12px; border-bottom:1px solid #e5e7eb; }
+      .bottombar { border-top:1px solid #e5e7eb; border-bottom:none; margin-top:auto; }
+      .brand { font-weight:600; margin-right:12px; display:flex; align-items:center; gap:8px; }
+      .controls select { margin-right:8px; }
+      .grid { display:grid; grid-template-columns: 1.1fr 1fr 1.2fr; gap:12px; padding:12px; }
+      .grid.hide-lib { grid-template-columns: 0fr 1fr 1.2fr; }
+      .panel { position:relative; display:flex; flex-direction:column; gap:8px; border:1px solid #e5e7eb; border-radius:8px; padding:12px; background:#fff; min-height:320px; }
+      .panel-header { display:flex; align-items:center; gap:8px; font-weight:600; }
+      .area { width:100%; min-height:160px; padding:8px; border:1px solid #ddd; border-radius:6px; }
+      .answer { white-space:pre-wrap; background:#fafafa; padding:8px; border:1px dashed #ddd; border-radius:6px; min-height:80px; }
+      .history { display:flex; flex-direction:column; gap:8px; max-height:260px; overflow:auto; }
+      .card { border:1px dashed #bbb; border-radius:6px; padding:8px; }
+      .row { display:flex; gap:8px; }
+      .col { display:flex; flex-direction:column; gap:8px; }
+      .btn { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #ddd; background:#f8f8f8; border-radius:6px; cursor:pointer; }
+      .btn.danger { border-color:#f5c2c7; background:#fde2e4; }
+      .lib-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+      .tree { border:1px solid #eee; border-radius:6px; padding:6px; max-height:300px; overflow:auto; }
+      .tree-node { display:flex; align-items:center; gap:8px; padding:4px 6px; cursor:pointer; border-radius:4px; }
+      .tree-node.selected { background:#eef2ff; }
+      .selection { margin-top:8px; display:flex; align-items:center; gap:8px; }
+      .toasts { position:fixed; right:12px; bottom:12px; display:flex; flex-direction:column; gap:8px; z-index:9999; }
+      .toast { padding:8px 12px; border-radius:6px; color:#fff; background:#6b7280; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.12); }
+      .toast.success { background:#16a34a; }
+      .toast.error { background:#dc2626; }
+      .spinner { width:16px; height:16px; border:2px solid #ddd; border-top-color:#555; border-radius:50%; animation:spin 1s linear infinite; }
+      @keyframes spin { to { transform:rotate(360deg); } }
+      .win-controls { display:flex; gap:8px; margin-right:8px; }
+      .win-controls button { width:28px; height:28px; border:1px solid #ddd; background:#f5f5f5; border-radius:4px; cursor:pointer; }
+      .icon { border:none; background:transparent; font-size:18px; cursor:pointer; }
+      /* Overlay (extraction et modales) */
+      .overlay { position:absolute; inset:0; background:rgba(0,0,0,.28); display:flex; align-items:center; justify-content:center; z-index:20; }
+      .overlay-card { width:min(860px, 92vw); max-height:80vh; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; }
+      .overlay-header { display:flex; align-items:center; justify-content:space-between; }
+      .overlay-body { display:flex; flex-direction:column; gap:10px; }
+      .busy { opacity:.7; pointer-events:none; }
+      /* Masquage bibliothèque */
+      .lib-hidden { display:none !important; }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
+  return (
+    <div className={`shell ${busy ? 'busy' : ''}`}>
+      <header className="topbar">
+        {isElectron && <WindowControls />}
+        <div className="brand">⚖️ Thémis</div>
+        <div className="controls">
+          <select value={engine} onChange={(e) => setEngine(e.target.value)}>
+            {ENGINES.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
+          </select>
+          <select value={model} onChange={(e) => setModel(e.target.value)}>
+            {(MODEL_OPTIONS[engine] || []).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+          <select value={role} onChange={(e) => setRole(e.target.value)}>
+            {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </div>
+        <button className="btn" style={{ marginLeft: 'auto' }} onClick={() => setShowLibrary(v => !v)}>
+          {showLibrary ? 'Masquer la bibliothèque' : 'Afficher la bibliothèque'}
+        </button>
+      </header>
+
+      <main className={`grid ${showLibrary ? '' : 'hide-lib'}`}>
+        <div className={showLibrary ? '' : 'lib-hidden'}>
+          <LibraryPanel backendModel={backendModel} onToast={add} />
+        </div>
+
+        <IAPanel
+          prompt={prompt}
+          setPrompt={setPrompt}
+          answer={answer}
+          onAsk={onAsk}
+          onExport={onExport}
+          history={history}
+          onDownload={onDownload}
+          busy={busy}
+          showExtractOverlay={showExtractOverlay}
+          extractText={extractText}
+          onOverlaySendToIA={onOverlaySendToIA}
+          onOverlaySendToWord={onOverlaySendToWord}
+          onOverlayCancel={onOverlayCancel}
+        />
+
+        <ActionsPanel
+          onOpenExtract={onOpenExtract}
+          onOpenImport={() => setShowImport(true)}
+          onOpenExport={() => setShowExport(true)}
+          onOpenPrint={() => setShowPrint(true)}
+        />
+      </main>
+
+      <footer className="bottombar">
+        <div>API: {API_BASE}</div>
+      </footer>
+
+      {/* Modales P3 */}
+      {showImport && (
+        <Modal title="Importer questions/réponses" onClose={() => setShowImport(false)}>
+          <p>Choisir un fichier Q/R pour alimenter l’historique ou la bibliothèque.</p>
+          <input type="file" />
+          <div className="row">
+            <button className="btn" onClick={() => setShowImport(false)}>Valider</button>
+            <button className="btn danger" onClick={() => setShowImport(false)}>Annuler</button>
+          </div>
+        </Modal>
+      )}
+      {showExport && (
+        <Modal title="Exporter la production" onClose={() => setShowExport(false)}>
+          <p>Exporter le dernier échange ou une sélection sous forme de document.</p>
+          <div className="row">
+            <button className="btn" onClick={onExport}>Générer</button>
+            <button className="btn danger" onClick={() => setShowExport(false)}>Fermer</button>
+          </div>
+        </Modal>
+      )}
+      {showPrint && (
+        <Modal title="Imprimer" onClose={() => setShowPrint(false)}>
+          <p>Préparer l’impression via le document généré.</p>
+          <div className="row">
+            <button className="btn" onClick={() => { window.print(); }}>Imprimer</button>
+            <button className="btn danger" onClick={() => setShowPrint(false)}>Fermer</button>
+          </div>
+        </Modal>
+      )}
+
+      <Toasts items={toasts} onClose={remove} />
+    </div>
+  );
+}
+
+
+
+
+
+
+
+

@@ -34,8 +34,9 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Db
+# Database
 db.sqlite
 /searxng
 
+# Certificates
 certificates

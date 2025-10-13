@@ -1,0 +1,231 @@
+// main.js - Electron Themis intégré
+const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
+const { spawn, exec } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+
+let mainWindow = null;
+let servicesProcess = null;
+let servicesStarted = false;
+
+// Configuration
+const CONFIG = {
+  projectPath: __dirname,
+  frontendPort: 3000,
+  perplexicaPort: 3001,
+  backendPort: 5000,
+  ollamaPort: 11434
+};
+
+// Logs
+function log(message, type = 'INFO') {
+  const timestamp = new Date().toISOString();
+  console.log([] [] );
+}
+
+// Démarrage services Docker
+function startAllServices() {
+  if (servicesStarted) {
+    log('Services déjà démarrés');
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    log('🚀 Démarrage des services Docker Themis...');
+    
+    exec('docker-compose down', { cwd: CONFIG.projectPath }, (error) => {
+      if (error) log(Arrêt services: , 'WARN');
+      
+      servicesProcess = spawn('docker-compose', ['up', '-d'], {
+        cwd: CONFIG.projectPath,
+        stdio: 'pipe',
+        shell: true
+      });
+
+      servicesProcess.stdout.on('data', (data) => {
+        log(Docker: );
+      });
+
+      servicesProcess.stderr.on('data', (data) => {
+        log(Docker Error: , 'ERROR');
+      });
+
+      servicesProcess.on('close', (code) => {
+        if (code === 0) {
+          log('✅ Services Docker démarrés avec succès');
+          servicesStarted = true;
+          setTimeout(resolve, 15000);
+        } else {
+          log(❌ Erreur Docker (code ), 'ERROR');
+          reject(new Error(Docker failed with code ));
+        }
+      });
+    });
+  });
+}
+
+// Création fenêtre Themis
+function createThemisWindow() {
+  log('🎨 Création de la fenêtre Themis...');
+  
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1200,
+    minHeight: 700,
+    frame: false,
+    titleBarStyle: 'hidden',
+    backgroundColor: '#ffffff',
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'electron', 'preload.js'),
+      webSecurity: true
+    },
+    icon: path.join(__dirname, 'electron', 'assets', 'themis-icon.png')
+  });
+
+  const themisUrl = http://localhost:;
+  
+  mainWindow.loadURL(themisUrl).catch(error => {
+    log(❌ Erreur chargement interface: , 'ERROR');
+    mainWindow.loadURL(http://localhost:).catch(() => {
+      mainWindow.loadFile(path.join(__dirname, 'electron', 'error.html'));
+    });
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    log('✨ Interface Themis affichée');
+    mainWindow.show();
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://localhost')) {
+      return { action: 'allow' };
+    }
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
+  return mainWindow;
+}
+
+// IPC Handlers
+ipcMain.handle('window-minimize', () => {
+  if (mainWindow) {
+    mainWindow.minimize();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('window-close', () => {
+  if (mainWindow) {
+    mainWindow.close();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('start-all-services', async () => {
+  try {
+    await startAllServices();
+    return { success: true, message: 'Services démarrés' };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+});
+
+ipcMain.handle('get-services-status', async () => {
+  return {
+    docker: servicesStarted,
+    frontend: true,
+    backend: servicesStarted,
+    perplexica: servicesStarted,
+    ollama: servicesStarted
+  };
+});
+
+// Création raccourci bureau
+function createDesktopShortcut() {
+  const scriptsDir = path.join(CONFIG.projectPath, 'scripts');
+  if (!fs.existsSync(scriptsDir)) {
+    fs.mkdirSync(scriptsDir, { recursive: true });
+  }
+
+  const startScript = @echo off
+title Themis - Demarrage
+cd /d ""
+echo 🏛️ Demarrage Themis...
+docker-compose up -d
+timeout /t 20 /nobreak >nul
+start "" "";
+
+  fs.writeFileSync(path.join(scriptsDir, 'start-themis.bat'), startScript, 'utf8');
+  log('📎 Script de démarrage créé');
+}
+
+// Démarrage principal
+app.whenReady().then(async () => {
+  log('⚡ Electron Themis démarré');
+  log(📁 Projet: );
+
+  Menu.setApplicationMenu(null);
+  createDesktopShortcut();
+
+  try {
+    log('🚀 Lancement des services...');
+    await startAllServices();
+    setTimeout(() => {
+      createThemisWindow();
+    }, 5000);
+  } catch (error) {
+    log(❌ Erreur démarrage: , 'ERROR');
+    setTimeout(() => {
+      createThemisWindow();
+    }, 2000);
+  }
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createThemisWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    if (servicesProcess) {
+      log('🛑 Arrêt des services Docker...');
+      exec('docker-compose down', { cwd: CONFIG.projectPath }, (error) => {
+        if (error) log(Erreur arrêt: , 'WARN');
+        app.quit();
+      });
+    } else {
+      app.quit();
+    }
+  }
+});
+
+process.on('uncaughtException', (error) => {
+  log(💥 Erreur non gérée: , 'ERROR');
+});
+
+log('🏛️ THEMIS - Application de gestion documentaire avec IA');

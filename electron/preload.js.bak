@@ -1,0 +1,20 @@
+// electron/preload.js - Script de préchargement sécurisé
+const { contextBridge, ipcRenderer } = require('electron');
+
+// API sécurisée exposée à React
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Contrôles de fenêtre
+  minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window-maximize'),
+  closeWindow: () => ipcRenderer.invoke('window-close'),
+  
+  // Services
+  startAllServices: () => ipcRenderer.invoke('start-all-services'),
+  getServicesStatus: () => ipcRenderer.invoke('get-services-status'),
+  
+  // Informations système
+  getVersion: () => process.versions.electron,
+  getPlatform: () => process.platform
+});
+
+console.log('🔐 Preload Themis chargé avec sécurité');

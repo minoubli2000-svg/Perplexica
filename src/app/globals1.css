@@ -1,0 +1,48 @@
+@tailwind base;
+
+@tailwind components;
+@tailwind utilities;
+@font-face {
+  font-family: 'PP Editorial';
+  src: url('/fonts/pp-ed-ul.otf') format('opentype');
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@layer base {
+  .overflow-hidden-scrollable {
+    -ms-overflow-style: none;
+  }
+  .overflow-hidden-scrollable::-webkit-scrollbar {
+    display: none;
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  select,
+  textarea,
+  input {
+    font-size: 16px !important;
+/* ==== TitleBar (frameless) ==== */
+.titlebar { -webkit-app-region: drag; display:flex; align-items:center; gap:12px; height:36px; padding:0 8px; background:#0f0f10; color:#eaeaea; border-bottom:1px solid #1f1f22; }
+.titlebar .no-drag, .titlebar .btn, .titlebar .themis-logo, .titlebar .brand { -webkit-app-region: no-drag; }
+.titlebar .left { display:flex; align-items:center; gap:10px; }
+.titlebar .spacer { flex:1; }
+.controls .btn { width:34px; height:26px; margin-left:6px; border:none; border-radius:6px; background:#1b1c1f; color:#d6d6d6; cursor:pointer; }
+.controls .btn:hover { background:#2a2c31; }
+.controls .btn.close:hover { background:#e84d4d; color:#fff; }
+.themis-logo { display:flex; flex-direction:column; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#ffffff; border:2px solid #d10f1f; color:#d10f1f; }
+.themis-logo .icon { font-size:14px; line-height:1; }
+.themis-logo .ver { font-size:10px; line-height:1; margin-top:-2px; }
+.brand { font-weight:600; }
+/* Masquer anciens éléments Perplexica s'ils existent */
+.perplexica-icons, .perplexica-toolbar, .perplexica-brand, [data-brand="perplexica"], [data-testid="perplexica-icons"] { display:none !important; }
+/* ==== Offset TitleBar et décalage des toolbars ==== */
+:root { --titlebar-h: 36px; } /* hauteur de la TitleBar */
+body  { padding-top: var(--titlebar-h); } /* pousse tout le contenu vers le bas */
+.titlebar { position: fixed; top:0; left:0; right:0; z-index:1000; } /* barre en haut */
+/* Décaler les barres du front sous la TitleBar */
+header, .topbar, .toolbar, .controls-bar, .app-toolbar, .modes-bar { top: var(--titlebar-h) !important; }
+/* Si ces barres sont fixed/sticky, assurer le positionnement et la pile */
+header, .topbar, .toolbar, .controls-bar, .app-toolbar, .modes-bar { position: sticky; z-index: 900; }
+
+}
+}
+}}

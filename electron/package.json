@@ -1,0 +1,13 @@
+{
+  "name": "themis-electron",
+  "version": "1.0.0",
+  "description": "Application Electron pour Themis",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron main.js",
+    "dev": "NODE_ENV=development electron main.js"
+  },
+  "dependencies": {
+    "electron": "^27.0.0"
+  }
+}

@@ -1,0 +1,203 @@
+"use strict";
+
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+const { spawn, exec } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+const http = require("node:http");
+const https = require("node:https");
+
+let mainWindow = null;
+let servicesProcess = null;
+let servicesStarted = false;
+
+// Configuration ports
+const CONFIG = {
+  projectPath: __dirname,
+  frontendPort: 3000,   // UI
+  backendPort: 3001,    // API Flask
+  ollamaPort: 11434
+};
+
+// Logging
+function log(message, type = "INFO") {
+  const ts = new Date().toISOString();
+  console.log(`[${ts}] [${type}] ${message}`);
+}
+
+// Attendre qu'une URL réponde < 400
+function waitForUrl(targetUrl, timeoutMs = 30000, intervalMs = 500) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(targetUrl);
+    const client = u.protocol === "https:" ? https : http;
+    const start = Date.now();
+
+    const tick = () => {
+      const req = client.request(
+        { method: "GET", hostname: u.hostname, port: u.port, path: u.pathname || "/" },
+        (res) => {
+          if (res.statusCode && res.statusCode < 400) {
+            res.resume();
+            resolve();
+          } else {
+            res.resume();
+            if (Date.now() - start > timeoutMs) reject(new Error(`Timeout ${targetUrl} (${res.statusCode})`));
+            else setTimeout(tick, intervalMs);
+          }
+        }
+      );
+      req.on("error", () => {
+        if (Date.now() - start > timeoutMs) reject(new Error(`Timeout ${targetUrl}`));
+        else setTimeout(tick, intervalMs);
+      });
+      req.end();
+    };
+    tick();
+  });
+}
+
+// Démarrer services Docker (optionnel)
+function startAllServices() {
+  if (servicesStarted) {
+    log("Services déjà démarrés");
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    log("🚀 Démarrage des services Docker Themis...");
+    exec("docker-compose down", { cwd: CONFIG.projectPath }, (downErr) => {
+      if (downErr) log(`Arrêt services (avertissement): ${downErr.message}`, "WARN");
+
+      servicesProcess = spawn("docker-compose", ["up", "-d"], {
+        cwd: CONFIG.projectPath,
+        stdio: "pipe",
+        shell: true
+      });
+
+      servicesProcess.stdout.on("data", (d) => log(`Docker: ${d.toString().trim()}`));
+      servicesProcess.stderr.on("data", (d) => log(`Docker Error: ${d.toString().trim()}`, "ERROR"));
+
+      servicesProcess.on("close", (code) => {
+        if (code === 0) {
+          log("✅ Services Docker démarrés avec succès");
+          servicesStarted = true;
+          setTimeout(resolve, 15000);
+        } else {
+          log(`❌ Erreur Docker (code ${code})`, "ERROR");
+          reject(new Error(`Docker failed with code ${code}`));
+        }
+      });
+    });
+  });
+}
+
+function createThemisWindow() {
+  log("🎨 Création de la fenêtre Themis...");
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1200,
+    minHeight: 700,
+    frame: false,
+    titleBarStyle: "hidden",
+    backgroundColor: "#ffffff",
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "electron", "preload.js"),
+      webSecurity: true
+    },
+    icon: path.join(__dirname, "electron", "assets", "themis-icon.png")
+  });
+
+  const startURL = process.env.ELECTRON_START_URL || `http://127.0.0.1:${CONFIG.frontendPort}`;
+
+  mainWindow.loadURL(startURL).catch((error) => {
+    log(`❌ Erreur chargement interface (${startURL}): ${error.message}`, "ERROR");
+    mainWindow.loadFile(path.join(__dirname, "electron", "error.html")).catch((e2) => {
+      log(`❌ Fallback error.html échoué: ${e2.message}`, "ERROR");
+    });
+  });
+
+  mainWindow.webContents.once("did-finish-load", () => {
+    log("✨ Interface Themis affichée");
+    mainWindow.show();
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1")) {
+      return { action: "allow" };
+    }
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  mainWindow.on("closed", () => { mainWindow = null; });
+  return mainWindow;
+}
+
+// IPC
+ipcMain.handle("window-minimize", () => {
+  if (mainWindow) { mainWindow.minimize(); return true; }
+  return false;
+});
+ipcMain.handle("window-maximize", () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+    return true;
+  }
+  return false;
+});
+ipcMain.handle("window-close", () => {
+  if (mainWindow) { mainWindow.close(); return true; }
+  return false;
+});
+ipcMain.handle("start-all-services", async () => {
+  try { await startAllServices(); return { success: true, message: "Services démarrés" }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle("get-services-status", async () => {
+  return {
+    docker: servicesStarted,
+    frontend: true,
+    backend: servicesStarted,
+    perplexica: servicesStarted,
+    ollama: servicesStarted
+  };
+});
+
+// Cycle de vie
+app.whenReady().then(async () => {
+  log("⚡ Electron Themis démarré");
+  log(`📁 Projet: ${CONFIG.projectPath}`);
+  Menu.setApplicationMenu(null);
+
+  // Optionnel: attendre que l'UI réponde avant d'afficher
+  try { await waitForUrl(`http://127.0.0.1:${CONFIG.frontendPort}`); }
+  catch { log("Front non prêt dans les temps, on continue quand même", "WARN"); }
+
+  createThemisWindow();
+});
+
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createThemisWindow();
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    if (servicesProcess) {
+      log("🛑 Arrêt des services Docker...");
+      exec("docker-compose down", { cwd: CONFIG.projectPath }, (error) => {
+        if (error) log(`Erreur arrêt: ${error.message}`, "WARN");
+        app.quit();
+      });
+    } else {
+      app.quit();
+    }
+  }
+});
+
+process.on("uncaughtException", (error) => {
+  log(`💥 Erreur non gérée: ${error.stack || error.message}`, "ERROR");
+});

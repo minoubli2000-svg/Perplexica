@@ -1,39 +1,36 @@
-version: "3.8"
+version: '3.8'
 
 services:
   searxng:
     image: docker.io/searxng/searxng:latest
-    volumes:
-      - ./searxng:/etc/searxng:rw
     ports:
-      - 4000:8080
+      - "4000:8080"
     networks:
-      - perplexica-network
-    restart: unless-stopped
+      - themis-network
 
-  app:
+  perplexica:
     image: itzcrazykns1337/perplexica:main
-    build:
-      context: .
-      dockerfile: app.dockerfile
     environment:
       - SEARXNG_API_URL=http://searxng:8080
-      - DATA_DIR=/home/perplexica
+      - PERPLEXITY_API_KEY=
     ports:
-      - 3000:3000
+      - "3002:3000"
     networks:
-      - perplexica-network
+      - themis-network
+    depends_on:
+      - searxng
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
     volumes:
-      - backend-dbstore:/home/perplexica/data
-      - ./uploads:/home/perplexica/uploads
-      - ./config.toml:/home/perplexica/config.toml
-    restart: unless-stopped
+      - ollama-data:/root/.ollama
+    networks:
+      - themis-network
 
 networks:
-  perplexica-network:
+  themis-network:
 
 volumes:
-  backend-dbstore:
-
-
-
+  ollama-data:

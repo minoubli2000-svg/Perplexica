@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Police personnalisée (si besoin, fichier dans /public/fonts/) */
 @font-face {
   font-family: 'PP Editorial';
   src: url('/fonts/pp-ed-ul.otf') format('opentype');
@@ -10,20 +11,45 @@
   font-display: swap;
 }
 
-@layer base {
-  .overflow-hidden-scrollable {
-    -ms-overflow-style: none;
-  }
-
-  .overflow-hidden-scrollable::-webkit-scrollbar {
-    display: none;
-  }
+/* Barre du haut : blanche, texte rouge, bas rouge */
+.titlebar {
+  @apply flex items-center gap-4 h-14 px-6 bg-white text-red-600 border-b-2 border-red-600 shadow-none select-none;
 }
 
-@media screen and (-webkit-min-device-pixel-ratio: 0) {
-  select,
-  textarea,
-  input {
-    font-size: 16px !important;
-  }
+/* Logo Themis à gauche : rond, contour rouge uniquement ici */
+.themis-logo {
+  @apply flex items-center justify-center w-12 h-12 rounded-full border-2 border-red-600 bg-white text-red-600 text-2xl font-bold select-none;
+  font-family: 'PP Editorial', serif;
 }
+
+/* Masquer tout bouton Electron natif ou custom */
+.controls,
+.controls .btn,
+.button-N,
+.theme-toggle,
+.menu-documen,
+.menu-document,
+.menu-commentaires {
+  @apply hidden;
+}
+
+/* Fond blanc partout, sans cadre rouge */
+html, body, #root {
+  @apply bg-white min-h-screen min-w-full box-border;
+}
+
+/* Optionnel : donner un peu de resp. à la zone de contenu */
+.main-content {
+  @apply py-8 px-12;
+}
+
+/* Sidebar/document si présente, tu peux tout masquer par défaut */
+.library-bar, .side-bar {
+  @apply hidden;
+}
+.themis-toolbar {
+  -webkit-app-region: no-drag !important;
+  z-index: 1000;
+  position: relative;
+}
+

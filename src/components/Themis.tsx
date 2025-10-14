@@ -2,10 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  FaBalanceScale, FaTimes,FaPrint, FaMinus, FaWindowMaximize, FaCopy, FaMoon, FaSun,
-  FaRegFilePdf, FaFileExport, FaPlus, FaRegFolderOpen, FaTrashAlt, FaWifi, FaBan, FaUpload
+  FaBalanceScale, FaSyncAlt, FaTimes, FaPrint, FaMinus, FaWindowMaximize, FaCopy, FaMoon, FaSun,
+  FaRegFilePdf, FaFileExport, FaPlus, FaRegFolderOpen, FaTrashAlt, FaWifi, FaBan, FaUpload,
+  FaRobot, // Remplace FaBrain pour l'IA (icône robot)
+  FaCog, // Pour config si besoin
 } from 'react-icons/fa';
 import WindowControls from './WindowControls';
+import DraggableModal from './DraggableModal'; // Import pour les modals flottants (basé sur tes fichiers)
+
 
 
 // ===== CONFIGURATIONS =====
@@ -450,6 +454,12 @@ export default function Themis() {
   const [extractedText, setExtractedText] = useState('');
   const [history, setHistory] = useState([]);
 
+  
+  const [isExtracting, setIsExtracting] = useState(false);
+  const fileExtractInputRef = useRef<HTMLInputElement>(null); // Pour le ref input
+
+
+
   const [stage, setStage] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success' });
@@ -458,7 +468,7 @@ export default function Themis() {
   const [importedA, setImportedA] = useState('');
   const [loadingExport, setLoadingExport] = useState(false);
 
-  const fileExtractInputRef = useRef(null);
+ 
 
   const activeModelValue = models[engine];
   const model = toBackendModel(engine, activeModelValue);
@@ -506,20 +516,7 @@ export default function Themis() {
     setShowImportModal(false); setImportedQ(''); setImportedA(''); showToast('Q/R importée avec succès');
   };
 
-  const handleWordExport = async () => {
-    if (!question.trim() || !answer.trim()) return;
-    setLoadingExport(true);
-    try {
-      const { filename } = await generateDoc(question, answer, model);
-      showToast('Document Word généré');
-      downloadDoc(filename, model);
-    } catch (err) {
-      showToast(`Erreur export: ${err.message}`, 'error');
-    } finally {
-      setLoadingExport(false);
-    }
-  };
-
+  
   const handleCopyAnswer = async () => { if (!answer) return; try { await navigator.clipboard.writeText(answer); } catch {} };
 
   const handleEngineChange = (next) => {
@@ -547,37 +544,319 @@ const handlePrintAnswer = () => {
   printWin.document.close();
   printWin.print();
 };
- 
 
+  // État pour modals
+const [showExtractModal, setShowExtractModal] = useState(false);
+const [showPrintModal, setShowPrintModal] = useState(false);
 
+// Handler actualiser (efface tout)
+const handleRefreshAll = () => {
+  setQuestion('');
+  setAnswer('');
+  setHistory([]);
+  setError('');
+  setExtractedText('');
+  setToast({ message: 'Tout a été effacé', type: 'success' });
+};
 
-
-  const handleFileExtract = async (file) => {
-    if (!file) return;
-      try {
-    showToast("Extraction du texte en cours...");
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Appel direct à l'API extraction (évite upload séparé)
-    const res = await fetch('http://localhost:3001/api/documents/extract', {
-      method: 'POST',
-      body: formData,
-    });
-    const extractJson = await safeJson(res);
-
-    if (res.ok && extractJson.text) {
-      setExtractedText(extractJson.text);
-      showToast("Texte extrait avec succès !");
+const handleFileExtract = async (file: File | null) => {
+  if (!file) return;
+  setIsExtracting(true);
+  setError('');
+  try {
+    const text = await extractTextFromFile(file);
+    setExtractedText(text);
+    if (text && text.trim()) {
+      setShowExtractModal(true); // Ouvre modal
     } else {
-      showToast("Erreur extraction : " + (extractJson.error || "Inconnue"), "error");
+      setError('Aucun texte');
     }
-  } catch (e) {
-    showToast("Erreur technique : " + e.message, "error");
+  } catch (err) {
+    setError((err as Error).message);
   } finally {
-    if (fileExtractInputRef.current) fileExtractInputRef.current.value = "";
+    setIsExtracting(false);
   }
 };
+
+
+
+
+// Sauvegarde extrait dans bibliothèque (POST /api/upload avec extraction auto)
+const saveExtractToLibrary = async (filename: string, content: string) => {
+  try {
+    const formData = new FormData();
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const file = new File([blob], filename, { type: 'text/plain' });
+    formData.append('file', file);
+    formData.append('profile', 'general');  // Ou dynamique
+    formData.append('category', 'extraction');
+    formData.append('extract', 'true');  // Extraction auto si besoin
+
+    const response = await fetch('/api/upload', { method: 'POST', body: formData });
+    if (!response.ok) throw new Error(`Sauvegarde échouée: ${response.status}`);
+    
+    setToast?.({ message: 'Extrait copié dans la bibliothèque', type: 'success' });
+    setShowExtractModal(false);
+    setExtractedText('');
+  } catch (err) {
+    setError('Erreur lors de la copie: ' + (err as Error).message);
+    console.error('Sauvegarde erreur:', err);
+  }
+};
+
+// Extraction texte (TXT local, PDF/DOC via backend /api/documents/extract)
+const extractTextFromFile = async (file: File): Promise<string> => {
+  const fileType = file.name.split('.').pop()?.toLowerCase() || '';
+  
+  if (fileType === 'txt') {
+    // Lecture directe TXT
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string) || '');
+      reader.onerror = () => reject(new Error('Lecture TXT échouée'));
+      reader.readAsText(file);
+    });
+  } else if (['pdf', 'doc', 'docx', 'jpg', 'png'].includes(fileType)) {  // Étendu pour images OCR
+    // Backend pour PDF/DOC/OCR (route /api/documents/extract)
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/documents/extract', { method: 'POST', body: formData });
+    if (!response.ok) throw new Error(`Backend extraction: ${response.status}`);
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    return data.text || '';
+  } else {
+    throw new Error('Type non supporté (.txt, .pdf, .doc, .docx, .jpg, .png)');
+  }
+};
+
+ // Handler export Word (unique, async – fusion backend/client)
+const handleWordExport = async () => {
+  if (!question.trim() || !answer.trim()) {
+    setError('Question ou réponse vide pour export.');
+    return;
+  }
+  
+  setLoadingExport(true);
+  const timestamp = new Date().toISOString().split('T')[0];
+  
+  try {
+    let filename = `themis_qr_${timestamp}.docx`;
+    
+    // Tente backend (Flask /api/generate-doc si existant)
+    try {
+      const { filename: backendFilename } = await generateDoc(question, answer, model);
+      filename = backendFilename || filename;
+      showToast('Document Word généré via backend');
+    } catch (backendErr) {
+      console.warn('Backend indisponible, fallback client:', backendErr);
+      // Fallback client-side docx
+      const { Packer, Document, Paragraph, TextRun } = await import('docx');
+      const doc = new Document({
+        sections: [{
+          children: [
+            new Paragraph({ children: [new TextRun({ text: 'Question:', bold: true, size: 24 })] }),
+            new Paragraph({ children: [new TextRun({ text: question, size: 20 })] }),
+            new Paragraph({ children: [new TextRun({ text: '\n' })] }),
+            new Paragraph({ children: [new TextRun({ text: 'Réponse:', bold: true, size: 24 })] }),
+            new Paragraph({ children: [new TextRun({ text: answer, size: 20 })] }),
+          ],
+        }],
+      });
+      const blob = await Packer.toBlob(doc);
+      filename = `themis_qr_${timestamp}.docx`;
+      
+      // Download (file-saver ou natif)
+      try {
+        const { saveAs } = await import('file-saver');
+        saveAs(blob, filename);
+      } catch {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+      }
+    }
+    
+    // Download si backend gère pas
+    if (typeof downloadDoc === 'function') {
+      downloadDoc(filename, model);
+    }
+    
+    showToast('Export Word réussi !');
+    setError('');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+    setError('Export échoué: ' + msg);
+    showToast(`Erreur export: ${msg}`, 'error');
+    console.error('Word export error:', err);
+  } finally {
+    setLoadingExport(false);
+  }
+};
+
+   
+
+// Handler injecter à l'IA (unique, injecte extractedText dans question)
+const handleInjectToIA = () => {
+  if (extractedText) {
+    setQuestion(extractedText);  // Injecte dans champ question pour IA
+    setShowExtractModal(false);
+    setExtractedText('');
+    setError('');  // Reset
+  } else {
+    setError('Aucun texte extrait à injecter.');
+  }
+};
+
+// Handler impression (unique, Q/R complète avec print natif)
+const handlePrint = () => {
+  if (!question.trim() || !answer.trim()) {
+    setError('Question ou réponse vide pour impression.');
+    return;
+  }
+  
+  const printWin = window.open('', '_blank');
+  if (!printWin) {
+    setError('Impression bloquée (autorise les popups ?)');
+    return;
+  }
+  
+  printWin.document.write(`
+    <html>
+      <head>
+        <title>Réponse Themis</title>
+        <style>body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; } h1 { color: #333; } h2 { margin-top: 20px; } pre { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border-left: 3px solid #007bff; }</style>
+      </head>
+      <body>
+        <h1>Réponse Themis</h1>
+        <h2>Question:</h2>
+        <pre>${question}</pre>
+        <h2>Réponse:</h2>
+        <pre>${answer}</pre>
+      </body>
+    </html>
+  `);
+  printWin.document.close();
+  printWin.print();
+  printWin.close();  // Ferme après impression
+  setShowPrintModal(false);
+  setToast?.({ message: 'Impression lancée !', type: 'success' });
+};
+
+// Handler export PDF (unique, HTML fallback pour PDF-like)
+const handleExportPDF = async () => {
+  if (!question.trim() || !answer.trim()) {
+    setError('Question ou réponse vide pour export.');
+    return;
+  }
+  
+  const timestamp = new Date().toISOString().split('T')[0];
+  const filename = `reponse_themis_${timestamp}.html`;  // HTML printable (comme PDF dans navigateur)
+  
+  try {
+    const htmlContent = `
+      <html>
+        <head><title>Réponse Themis</title>
+        <style>body { font-family: Arial; margin: 20px; line-height: 1.5; } h1, h2 { color: #333; } pre { white-space: pre-wrap; background: #f5f5f5; padding: 10px; }</style>
+        </head>
+        <body>
+          <h1>Réponse Themis</h1>
+          <h2>Question:</h2>
+          <pre>${question}</pre>
+          <h2>Réponse:</h2>
+          <pre>${answer}</pre>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setShowPrintModal(false);
+    setToast?.({ message: `Export HTML réussi ! Ouvre et imprime comme PDF.`, type: 'success' });
+  } catch (err) {
+    setError('Export PDF échoué: ' + (err as Error).message);
+    console.error('PDF export error:', err);
+  }
+};
+
+{showExtractModal && (
+  <DraggableModal
+    isOpen={showExtractModal}
+    onClose={() => {
+      setShowExtractModal(false);
+      setExtractedText('');
+      setError('');
+    }}
+    title="Extraction Texte Fichier"
+    size="lg"  // Grande pour texte
+  >
+    <div className="space-y-4">
+      <input
+        type="file"
+        accept=".pdf,.txt,.doc,.docx,.md,.png,.jpg,.jpeg"
+        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            setLoading(true);  // Spinner si tu as
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(`${APIBASE}/api/documents/extract`, { method: 'POST', body: formData });
+            if (!res.ok) throw new Error(`Erreur ${res.status}`);
+            const data = await res.json();
+            setExtractedText(data.extracted_text || 'Aucun texte.');
+            setToast?.({ message: 'Extraction réussie !', type: 'success' });
+          } catch (err) {
+            setError(`Extraction échouée: ${err.message}`);
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
+      {extractedText && (
+        <div className="bg-blue-50 p-4 rounded-md max-h-64 overflow-y-auto">
+          <h5 className="font-bold text-blue-800 mb-2">Texte Extrait :</h5>
+          <pre className="whitespace-pre-wrap text-xs">{extractedText}</pre>
+          <div className="mt-4 flex gap-2">
+            <ThemisButton
+              onClick={() => {
+                setQuestion(extractedText);
+                setShowExtractModal(false);
+                setExtractedText('');
+                setToast?.({ message: 'Injecté dans IA !', type: 'success' });
+              }}
+              variant="primary"
+              size="sm"
+            >
+              Injecter dans IA
+            </ThemisButton>
+            <ThemisButton
+              onClick={() => navigator.clipboard.writeText(extractedText)}
+              variant="outline"
+              size="sm"
+            >
+              Copier
+            </ThemisButton>
+          </div>
+        </div>
+      )}
+      {error && <p className="text-red-500 text-xs">{error}</p>}
+    </div>
+  </DraggableModal>
+)}
+
+
+  
 
 
 
@@ -739,22 +1018,137 @@ return (
   )}
 </main>
 
+    {/* Modal Extraction Flottante */}
+{showExtractModal && extractedText && (
+  <DraggableModal onClose={() => setShowExtractModal(false)} title="Extraction de Fichier">
+    <div className="p-4 space-y-4">
+      <h4 className="font-semibold">Texte Extrait :</h4>
+      <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded max-h-48 overflow-y-auto whitespace-pre-wrap text-sm">
+        {extractedText}
+      </pre>
+      <div className="flex gap-2 justify-end">
+        <ThemisButton onClick={handleInjectToIA} variant="primary" icon={<FaBrain />}>
+          Injecter à l'IA
+        </ThemisButton>
+        <ThemisButton onClick={handleCopyToLibrary} variant="success" icon={<FaFolderOpen />}>
+          Copier dans Bibliothèque
+        </ThemisButton>
+        <ThemisButton onClick={() => setShowExtractModal(false)} variant="outline" icon={<FaTimes />}>
+          Annuler
+        </ThemisButton>
+      </div>
+    </div>
+  </DraggableModal>
+)}
 
-  {/* Sidebar droite */}
+{/* Modal Extraction - Texte sélectionnable */}
+{showExtractModal && extractedText.trim() && (
+  <DraggableModal 
+    onClose={() => { setShowExtractModal(false); setExtractedText(''); }} 
+    title="Extraction - Choisissez le Texte"
+  >
+    <div className="p-4 space-y-4">
+      <h4 className="font-semibold text-gray-800 dark:text-gray-200">Texte Extrait (cliquez pour sélectionner) :</h4>
+      <div className="space-y-2">
+        <textarea
+          value={extractedText}
+          readOnly
+          className="w-full h-32 bg-gray-100 dark:bg-gray-700 p-2 rounded border text-sm font-mono resize-none focus:outline-none"
+          placeholder="Cliquez ici pour sélectionner le texte, puis Ctrl+C pour copier"
+          onClick={(e) => {
+            e.currentTarget.focus();
+            e.currentTarget.select(); // Sélectionne tout au clic
+          }}
+          onMouseUp={(e) => e.currentTarget.select()} // Sélection au clic-droit/souris
+        />
+        <ThemisButton 
+          onClick={(e) => {
+            const textarea = e.currentTarget.previousElementSibling as HTMLTextAreaElement;
+            if (textarea) textarea.select();
+          }} 
+          variant="outline" 
+          size="sm" 
+          className="w-full"
+        >
+          Sélectionner tout (Ctrl+A)
+        </ThemisButton>
+      </div>
+      <div className="flex flex-wrap gap-2 justify-end">
+        <ThemisButton onClick={handleInjectToIA} variant="primary" icon={<FaRobot />}>
+          Injecter à l'IA
+        </ThemisButton>
+        <ThemisButton onClick={handleCopyToLibrary} variant="success" icon={<FaRegFolderOpen />}>
+          Copier Bibliothèque
+        </ThemisButton>
+        <ThemisButton onClick={() => { setShowExtractModal(false); setExtractedText(''); }} variant="outline" icon={<FaTimes />}>
+          Annuler
+        </ThemisButton>
+      </div>
+    </div>
+  </DraggableModal>
+)}
+
+{/* Modal Impression */}
+{showPrintModal && answer && (
+  <DraggableModal onClose={() => setShowPrintModal(false)} title="Imprimer Réponse">
+    <div className="p-4 space-y-4">
+      <h4 className="font-semibold text-gray-800 dark:text-gray-200">Réponse à Imprimer :</h4>
+      <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">
+        {answer}
+      </pre>
+      <div className="flex gap-2 justify-end">
+        <ThemisButton onClick={handlePrint} variant="dark" icon={<FaPrint />}>
+          Imprimer
+        </ThemisButton>
+        <ThemisButton onClick={handleExportPDF} variant="success" icon={<FaFilePdf />}>
+          Exporter PDF
+        </ThemisButton>
+        <ThemisButton onClick={() => setShowPrintModal(false)} variant="outline" icon={<FaTimes />}>
+          Annuler
+        </ThemisButton>
+      </div>
+    </div>
+  </DraggableModal>
+)}
+
+
+{/* Modal Impression */}
+{showPrintModal && answer && (
+  <DraggableModal onClose={() => setShowPrintModal(false)} title="Imprimer Réponse">
+    <div className="p-4 space-y-4">
+      <h4 className="font-semibold">Réponse à Imprimer :</h4>
+      <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded max-h-48 overflow-y-auto whitespace-pre-wrap text-sm">
+        {answer}
+      </pre>
+      <div className="flex gap-2 justify-end">
+        <ThemisButton onClick={handlePrint} variant="dark" icon={<FaPrint />}>
+          Imprimer
+        </ThemisButton>
+        <ThemisButton onClick={handleExportPDF} variant="success" icon={<FaFilePdf />}>
+          Exporter PDF
+        </ThemisButton>
+        <ThemisButton onClick={() => setShowPrintModal(false)} variant="outline" icon={<FaTimes />}>
+          Annuler
+        </ThemisButton>
+      </div>
+    </div>
+  </DraggableModal>
+)}
+
+
+ {/* Sidebar droite */}
 <aside className="flex flex-col flex-1 max-w-[270px] min-w-[200px] bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-l border-blue-200 dark:border-gray-700 py-6 px-4 space-y-4">
   <ThemisButton className="w-full" icon={<FaRegFolderOpen />} onClick={() => setShowLibrary(!showLibrary)} variant="dark">
     {showLibrary ? 'Masquer' : 'Afficher'} Bibliothèque
   </ThemisButton>
-  <h3 className="text-lg font-bold text-center text-blue-700 dark:text-blue-300">Configuration IA</h3>
-  <div className="pt-4 border-t border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 space-y-1">
-    <div>Engine: <strong>{engine}</strong></div>
-    <div>Model: <strong>{models[engine]}</strong></div>
-    <div>Role: <strong>{role}</strong></div>
-    <div>Historique: <strong>{history.length}</strong> entrées</div>
-  </div>
 
-  {/* Éléments déplacés + Imprimer */}
+  {/* Boutons d'actions (sans config IA) */}
   <div className="space-y-3">
+    {/* Bouton Actualiser (nouveau) */}
+    <ThemisButton onClick={handleRefreshAll} variant="outline" icon={<FaSyncAlt />} className="w-full">
+      Actualiser (efface tout)
+    </ThemisButton>
+
     <ThemisButton
       onClick={handleWordExport}
       disabled={loadingExport || !question.trim() || !answer.trim()}
@@ -774,7 +1168,7 @@ return (
       Copier
     </ThemisButton>
     <ThemisButton
-      onClick={handlePrintAnswer}
+      onClick={() => setShowPrintModal(true)}
       disabled={!answer.trim()}
       variant="dark"
       icon={<FaPrint />}
@@ -790,20 +1184,35 @@ return (
     >
       Import Q/R
     </ThemisButton>
-    <label className="w-full block">
-      <ThemisButton as="span" variant="outline" icon={<FaRegFilePdf />} className="w-full">
-        Extraire fichier
+    {/* Bouton Extraire fichier avec input caché (label mis à jour) */}
+    <label className="w-full block cursor-pointer">
+      <ThemisButton 
+        as="span" 
+        variant="outline" 
+        icon={<FaRegFilePdf />} 
+        className="w-full"
+        disabled={isExtracting}
+      >
+        {isExtracting ? 'Extraction en cours...' : 'Extraire fichier'}
       </ThemisButton>
       <input
         ref={fileExtractInputRef}
         type="file"
         accept=".pdf,.doc,.docx,.txt"
-        onChange={e => handleFileExtract(e.target.files?.[0] || null)}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleFileExtract(file);  // Appel direct ; modal géré à l'intérieur
+          }
+          e.target.value = '';  // Reset pour ré-selection immédiate
+        }}
         className="hidden"
+        disabled={isExtracting}
       />
     </label>
   </div>
 </aside>
 </div>
 );
-} 
+}
+ 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  FaBalanceScale, FaTimes, FaMinus, FaWindowMaximize, FaCopy, FaMoon, FaSun,
+  FaBalanceScale, FaTimes,FaPrint, FaMinus, FaWindowMaximize, FaCopy, FaMoon, FaSun,
   FaRegFilePdf, FaFileExport, FaPlus, FaRegFolderOpen, FaTrashAlt, FaWifi, FaBan, FaUpload
 } from 'react-icons/fa';
 import WindowControls from './WindowControls';
@@ -292,6 +292,10 @@ const LibrarySidebar = ({ onStructureChange }) => {
     }
   };
 
+  
+
+
+
   const handleDelete = async (filename, model, subdir = null) => {
     if (!confirm(`Supprimer ${filename} ?`)) return;
     try {
@@ -325,6 +329,7 @@ const LibrarySidebar = ({ onStructureChange }) => {
     const folders = typeof modelData === 'object' && !Array.isArray(modelData)
       ? modelData
       : { '': (modelData?.files || modelData || []) };
+
 
     return Object.entries(folders).map(([subdir, files]) => (
       <div key={subdir} className="border-l-2 border-blue-200 dark:border-blue-600 pl-3">
@@ -525,16 +530,31 @@ export default function Themis() {
   const safeJson = async res => {
   const contentType = res.headers.get("content-type");
   if (contentType && contentType.indexOf("application/json") !== -1) {
-    return await res.json();
+  return await res.json();
   } else {
     const textErr = await res.text();
     throw new Error(textErr);
   }
 };
 
-const handleFileExtract = async (file) => {
-  if (!file) return;
-  try {
+ 
+const handlePrintAnswer = () => {
+  if (!answer) return;
+  const printWin = window.open('', '_blank');
+  printWin.document.write(`
+    <html><head><title>Réponse Themis</title></head><body><pre>${answer}</pre></body></html>
+  `);
+  printWin.document.close();
+  printWin.print();
+};
+ 
+
+
+
+
+  const handleFileExtract = async (file) => {
+    if (!file) return;
+      try {
     showToast("Extraction du texte en cours...");
     const formData = new FormData();
     formData.append('file', file);
@@ -572,206 +592,218 @@ return (
       )}
 
       {/* Contenu principal */}
-      <main className="flex-1 flex flex-col items-stretch">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-blue-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80">
-          {/* Titre Themis avec balance blanche et bordure rouge */}
-          <div className="flex items-center gap-2 px-3 py-1 rounded bg-transparent">
-  <FaBalanceScale className="themis-balance" />
-  <span className="themis-title">Themis</span>
-</div>
-
-
-
-
-
-          {/* Profil */}
-          <div>
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Profil:</label>
-            <select value={role} onChange={e => setRole(e.target.value)} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-              {ROLES.map(r => (<option key={r.value} value={r.value}>{r.label}</option>))}
-            </select>
-          </div>
-
-          {/* Mode IA */}
-          <div>
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Mode:</label>
-            <ThemisButton size="xs" variant={onlineMode === 'en_ligne' ? 'success' : 'outline'} disabled={role === 'general'} onClick={() => setOnlineMode('en_ligne')} className="mr-1">
-              En ligne <FaWifi />
-            </ThemisButton>
-            <ThemisButton size="xs" variant={onlineMode === 'hors_ligne' ? 'success' : 'outline'} disabled={role === 'general'} onClick={() => setOnlineMode('hors_ligne')}>
-              Hors ligne <FaBan />
-            </ThemisButton>
-          </div>
-
-          {/* Moteur */}
-          <div>
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Moteur:</label>
-            <select value={engine} onChange={e => handleEngineChange(e.target.value)} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-              {ENGINES.filter(e =>
-                onlineMode === 'en_ligne' ? ['perplexity', 'gpt'].includes(e.value) : ['ollama', 'perplexica'].includes(e.value)
-              ).map(option => (<option key={option.value} value={option.value}>{option.label}</option>))}
-            </select>
-          </div>
-
-          {/* Modèle */}
-          <div>
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Modèle:</label>
-            <select value={models[engine]} onChange={e => setModels(prev => ({ ...prev, [engine]: e.target.value }))} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-              {(MODEL_OPTIONS[engine] || []).map(m => (<option key={m.value} value={m.value}>{m.label}</option>))}
-            </select>
-          </div>
-
-          {/* Thème */}
-          <ThemisButton size="xs" variant="outline" icon={theme === 'dark' ? <FaSun /> : <FaMoon />} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="ml-auto" title="Changer le thème">
-            {theme === 'dark' ? 'Clair' : 'Sombre'}
-          </ThemisButton>
-        </div>
-
-        {/* Progression */}
-        <div className="px-6 pt-4">
-          <ProgressBar stage={stage} />
-        </div>
-
-        {/* Question + actions */}
-        <div className="flex flex-col gap-3 px-6 py-4">
-          <textarea
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            rows={3}
-            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500"
-            placeholder="Posez votre question à l'IA..."
-          />
-          <div className="flex flex-wrap gap-2 items-center">
-            <ThemisButton onClick={handleAskAI} disabled={!question.trim()} variant="primary" icon={<FaBalanceScale />}>
-              Poser la question
-            </ThemisButton>
-            <ThemisButton onClick={handleWordExport} disabled={!question.trim() || !answer.trim()} loading={loadingExport} variant="success" icon={<FaFileExport />}>
-              Export Word
-            </ThemisButton>
-            <ThemisButton onClick={handleCopyAnswer} disabled={!answer} variant="outline" icon={<FaCopy />}>
-              Copier
-            </ThemisButton>
-            <ThemisButton onClick={handleClear} variant="outline" icon={<FaTrashAlt />}>
-              Effacer
-            </ThemisButton>
-            <ThemisButton onClick={() => setShowImportModal(true)} variant="dark" icon={<FaPlus />}>
-              Import Q/R
-            </ThemisButton>
-
-            {/* Extraire d’un fichier */}
-            <label className="inline-flex items-center gap-2 px-3 py-2 border rounded cursor-pointer">
-              <FaRegFilePdf />
-              <span>Extraire d’un fichier</span>
-              <input
-                ref={fileExtractInputRef}
-                type="file"
-                accept=".pdf,.txt,.md,.doc,.docx"
-                className="hidden"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  await handleFileExtract(f);
-                }}
-              />
-            </label>
-          </div>
-        </div>
-
-        {/* Erreurs */}
-        {error && (
-          <div className="mx-6 mb-2 p-4 bg-red-100 dark:bg-red-900/50 border-l-4 border-red-500 text-red-700 dark:text-red-300 rounded-lg">
-            <strong>Erreur:</strong> {error}
-          </div>
-        )}
-
-        {extractedText && (
-  <div className="mx-6 mb-2 p-4 bg-blue-50 dark:bg-blue-900/30 border-l-4 border-blue-500 rounded-lg">
-    <h4 className="font-semibold text-blue-700 dark:text-blue-300 mb-2">Texte extrait:</h4>
-    <pre className="whitespace-pre-wrap text-sm text-blue-800 dark:text-blue-200 max-h-32 overflow-y-auto bg-white dark:bg-gray-800 p-2 rounded">
-      {extractedText}
-    </pre>
-    <button
-      className="mt-2 px-3 py-1 bg-blue-600 text-white rounded shadow"
-      onClick={() => setQuestion(extractedText)}
-      title="Envoyer ce texte à l'IA">
-      Injecter dans l’IA
-    </button>
-  </div>
-)}
-
-
-        {/* Réponse IA */}
-        {answer && (
-          <div className="relative mx-6 mb-2 p-4 bg-green-50 dark:bg-green-900/30 border-l-4 border-green-500 rounded-lg">
-            <h4 className="font-semibold text-green-700 dark:text-green-300 mb-2">Réponse:</h4>
-            <pre className="whitespace-pre-wrap text-sm text-green-800 dark:text-green-200 max-h-64 overflow-y-auto">
-              {answer}
-            </pre>
-            <ThemisButton icon={<FaCopy />} onClick={handleCopyAnswer} size="sm" variant="outline" className="absolute top-2 right-2" title="Copier la réponse" />
-          </div>
-        )}
-
-        {/* Historique */}
-        {history.length > 0 && (
-          <div className="mx-6 mb-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-            <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Historique des conversations:</h4>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {history.slice(0, 3).map(({ question: q, answer: a }, idx) => (
-                <div key={idx} className="p-3 bg-white dark:bg-gray-700 rounded border-l-2 border-gray-300 dark:border-gray-600">
-                  <div className="text-sm">
-                    <strong className="text-blue-600 dark:text-blue-400">Q:</strong>{' '}{q}
-                  </div>
-                  <div className="text-sm mt-1">
-                    <strong className="text-green-600 dark:text-green-400">R:</strong>{' '}{(a || '').substring(0, 100)}...
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Toast */}
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
-
-        {/* Modal Import Q/R */}
-        {showImportModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 min-w-[400px] max-w-[600px] border border-gray-200 dark:border-gray-700 shadow-2xl">
-              <h4 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Importer une Question/Réponse</h4>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Question:</label>
-                  <textarea value={importedQ} onChange={e => setImportedQ(e.target.value)} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500" rows={3} placeholder="Saisissez votre question..." />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Réponse:</label>
-                  <textarea value={importedA} onChange={e => setImportedA(e.target.value)} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500" rows={4} placeholder="Saisissez la réponse..." />
-                </div>
-              </div>
-              <div className="flex gap-3 mt-6 justify-end">
-                <ThemisButton onClick={() => setShowImportModal(false)} variant="outline">Annuler</ThemisButton>
-                <ThemisButton onClick={handleImportQR} variant="success" disabled={!importedQ.trim() || !importedA.trim()}>
-                  Importer
-                </ThemisButton>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Sidebar droite */}
-      <aside className="flex flex-col flex-1 max-w-[270px] min-w-[200px] bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-l border-blue-200 dark:border-gray-700 py-6 px-4 space-y-4">
-        <ThemisButton className="w-full" icon={<FaRegFolderOpen />} onClick={() => setShowLibrary(!showLibrary)} variant="dark">
-          {showLibrary ? 'Masquer' : 'Afficher'} Bibliothèque
-        </ThemisButton>
-        <h3 className="text-lg font-bold text-center text-blue-700 dark:text-blue-300">Configuration IA</h3>
-        <div className="pt-4 border-t border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 space-y-1">
-          <div>Engine: <strong>{engine}</strong></div>
-          <div>Model: <strong>{models[engine]}</strong></div>
-          <div>Role: <strong>{role}</strong></div>
-          <div>Historique: <strong>{history.length}</strong> entrées</div>
-        </div>
-      </aside>
+<main className="flex-1 flex flex-col items-stretch">
+  {/* Toolbar */}
+  <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-blue-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80">
+    {/* Titre Themis avec balance blanche et bordure rouge */}
+    <div className="flex items-center gap-2 px-3 py-1 rounded bg-transparent">
+      <FaBalanceScale className="themis-balance" />
+      <span className="themis-title">Themis</span>
     </div>
-  );
-}
+
+    {/* Profil */}
+    <div>
+      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Profil:</label>
+      <select value={role} onChange={e => setRole(e.target.value)} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+        {ROLES.map(r => (<option key={r.value} value={r.value}>{r.label}</option>))}
+      </select>
+    </div>
+
+    {/* Mode IA */}
+    <div>
+      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Mode:</label>
+      <ThemisButton size="xs" variant={onlineMode === 'en_ligne' ? 'success' : 'outline'} disabled={role==='general'} onClick={()=>setOnlineMode('en_ligne')} className="mr-1">
+        En ligne <FaWifi />
+      </ThemisButton>
+      <ThemisButton size="xs" variant={onlineMode === 'hors_ligne'? 'success':'outline'} disabled={role==='general'} onClick={()=>setOnlineMode('hors_ligne')}>
+        Hors ligne <FaBan />
+      </ThemisButton>
+    </div>
+
+    {/* Moteur */}
+    <div>
+      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Moteur:</label>
+      <select value={engine} onChange={e=>handleEngineChange(e.target.value)} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+        {ENGINES.filter(e=> onlineMode==='en_ligne'? ['perplexity','gpt'].includes(e.value) : ['ollama','perplexica'].includes(e.value))
+          .map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+
+    {/* Modèle */}
+    <div>
+      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">Modèle:</label>
+      <select value={models[engine]} onChange={e=>setModels(p=>({...p,[engine]:e.target.value}))} className="px-2 py-1 rounded border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+        {(MODEL_OPTIONS[engine]||[]).map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
+      </select>
+    </div>
+
+    {/* Thème */}
+    <ThemisButton size="xs" variant="outline" icon={theme==='dark'? <FaSun/>:<FaMoon/>} onClick={()=>setTheme(theme==='dark'?'light':'dark')} className="ml-auto" title="Changer le thème">
+      {theme==='dark'?'Clair':'Sombre'}
+    </ThemisButton>
+  </div>
+
+  {/* Progression */}
+  <div className="px-6 pt-4"><ProgressBar stage={stage}/></div>
+
+  {/* Question + actions */}
+  <div className="flex flex-col gap-3 px-6 py-4">
+    <textarea
+      value={question}
+      onChange={e=>setQuestion(e.target.value)}
+      rows={3}
+      className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500"
+      placeholder="Posez votre question à l'IA..."
+    />
+    <div className="flex flex-wrap gap-2 items-center">
+      <ThemisButton onClick={handleAskAI} disabled={!question.trim()} variant="primary" icon={<FaBalanceScale/>}>
+        Poser la question
+      </ThemisButton>
+      <ThemisButton onClick={handleClear} variant="outline" icon={<FaTrashAlt/>}>
+        Effacer
+      </ThemisButton>
+      {/* Tous les autres boutons Export/Copy/Import/Extract sont supprimés d'ici */}
+    </div>
+  </div>
+
+  {/* Erreurs */}
+  {error && (
+    <div className="mx-6 mb-2 p-4 bg-red-100 dark:bg-red-900/50 border-l-4 border-red-500 text-red-700 dark:text-red-300 rounded-lg">
+      <strong>Erreur:</strong> {error}
+    </div>
+  )}
+
+  {/* Texte Extrait */}
+  {extractedText && (
+    <div className="mx-6 mb-2 p-4 bg-blue-50 dark:bg-blue-900/30 border-l-4 border-blue-500 rounded-lg">
+      <h4 className="font-semibold text-blue-700 dark:text-blue-300 mb-2">Texte extrait:</h4>
+      <pre className="whitespace-pre-wrap text-sm text-blue-800 dark:text-blue-200 max-h-32 overflow-y-auto bg-white dark:bg-gray-800 p-2 rounded">
+        {extractedText}
+      </pre>
+      <button className="mt-2 px-3 py-1 bg-blue-600 text-white rounded shadow" onClick={()=>setQuestion(extractedText)} title="Envoyer ce texte à l’IA">
+        Injecter dans l’IA
+      </button>
+    </div>
+  )}
+
+  {/* Réponse IA */}
+  {answer && (
+    <div className="relative mx-6 mb-2 p-4 bg-green-50 dark:bg-green-900/30 border-l-4 border-green-500 rounded-lg">
+      <h4 className="font-semibold text-green-700 dark:text-green-300 mb-2">Réponse:</h4>
+      <pre className="whitespace-pre-wrap text-sm text-green-800 dark:text-green-200 max-h-64 overflow-y-auto">
+        {answer}
+      </pre>
+      <ThemisButton icon={<FaCopy/>} onClick={handleCopyAnswer} size="sm" variant="outline" className="absolute top-2 right-2" title="Copier la réponse"/>
+    </div>
+  )}
+
+  {/* Historique */}
+  {history.length>0 && (
+    <div className="mx-6 mb-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Historique des conversations:</h4>
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {history.slice(0,3).map(({question:q,answer:a},idx)=>(
+          <div key={idx} className="p-3 bg-white dark:bg-gray-700 rounded border-l-2 border-gray-300 dark:border-gray-600">
+            <div className="text-sm"><strong className="text-blue-600 dark:text-blue-400">Q:</strong> {q}</div>
+            <div className="text-sm mt-1"><strong className="text-green-600 dark:text-green-400">R:</strong> {(a||'').substring(0,100)}...</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
+  {/* Toast */}
+  <Toast message={toast.message} type={toast.type} onClose={()=>setToast({message:'',type:'success'})}/>
+
+  {/* Modal Import Q/R */}
+  {showImportModal && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 min-w-[400px] max-w-[600px] border border-gray-200 dark:border-gray-700 shadow-2xl">
+        <h4 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Importer une Question/Réponse</h4>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Question:</label>
+            <textarea value={importedQ} onChange={e=>setImportedQ(e.target.value)} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500" rows={3} placeholder="Saisissez votre question..." />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Réponse:</label>
+            <textarea value={importedA} onChange={e=>setImportedA(e.target.value)} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500" rows={4} placeholder="Saisissez la réponse..." />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6 justify-end">
+          <ThemisButton onClick={()=>setShowImportModal(false)} variant="outline">Annuler</ThemisButton>
+          <ThemisButton onClick={handleImportQR} variant="success" disabled={!importedQ.trim()||!importedA.trim()}>Importer</ThemisButton>
+        </div>
+      </div>
+    </div>
+  )}
+</main>
+
+
+  {/* Sidebar droite */}
+<aside className="flex flex-col flex-1 max-w-[270px] min-w-[200px] bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-l border-blue-200 dark:border-gray-700 py-6 px-4 space-y-4">
+  <ThemisButton className="w-full" icon={<FaRegFolderOpen />} onClick={() => setShowLibrary(!showLibrary)} variant="dark">
+    {showLibrary ? 'Masquer' : 'Afficher'} Bibliothèque
+  </ThemisButton>
+  <h3 className="text-lg font-bold text-center text-blue-700 dark:text-blue-300">Configuration IA</h3>
+  <div className="pt-4 border-t border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+    <div>Engine: <strong>{engine}</strong></div>
+    <div>Model: <strong>{models[engine]}</strong></div>
+    <div>Role: <strong>{role}</strong></div>
+    <div>Historique: <strong>{history.length}</strong> entrées</div>
+  </div>
+
+  {/* Éléments déplacés + Imprimer */}
+  <div className="space-y-3">
+    <ThemisButton
+      onClick={handleWordExport}
+      disabled={loadingExport || !question.trim() || !answer.trim()}
+      variant="success"
+      icon={<FaFileExport />}
+      className="w-full"
+    >
+      Exporter Word
+    </ThemisButton>
+    <ThemisButton
+      onClick={handleCopyAnswer}
+      disabled={!answer.trim()}
+      variant="primary"
+      icon={<FaCopy />}
+      className="w-full"
+    >
+      Copier
+    </ThemisButton>
+    <ThemisButton
+      onClick={handlePrintAnswer}
+      disabled={!answer.trim()}
+      variant="dark"
+      icon={<FaPrint />}
+      className="w-full"
+    >
+      Imprimer
+    </ThemisButton>
+    <ThemisButton
+      onClick={() => setShowImportModal(true)}
+      variant="secondary"
+      icon={<FaUpload />}
+      className="w-full"
+    >
+      Import Q/R
+    </ThemisButton>
+    <label className="w-full block">
+      <ThemisButton as="span" variant="outline" icon={<FaRegFilePdf />} className="w-full">
+        Extraire fichier
+      </ThemisButton>
+      <input
+        ref={fileExtractInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.txt"
+        onChange={e => handleFileExtract(e.target.files?.[0] || null)}
+        className="hidden"
+      />
+    </label>
+  </div>
+</aside>
+</div>
+);
+} 

@@ -1,0 +1,5 @@
+# Question
+qui est napoleon
+
+# Réponse
+[Réponse simulée] perplexity:sonar: qui est napoleon...

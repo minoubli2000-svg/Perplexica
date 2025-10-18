@@ -115,11 +115,7 @@ const Searchvideos = ({
                   <div
                     onClick={() => {
                       setOpen(true);
-                      setSlides([
-                        slides[i],
-                        ...slides.slice(0, i),
-                        ...slides.slice(i + 1),
-                      ]);
+                      setSlides([slides[i], ...slides.slice(0, i), ...slides.slice(i + 1)]);
                     }}
                     className="relative transition duration-200 active:scale-95 hover:scale-[1.02] cursor-pointer"
                     key={i}
@@ -139,11 +135,7 @@ const Searchvideos = ({
                   <div
                     onClick={() => {
                       setOpen(true);
-                      setSlides([
-                        slides[i],
-                        ...slides.slice(0, i),
-                        ...slides.slice(i + 1),
-                      ]);
+                      setSlides([slides[i], ...slides.slice(0, i), ...slides.slice(i + 1)]);
                     }}
                     className="relative transition duration-200 active:scale-95 hover:scale-[1.02] cursor-pointer"
                     key={i}

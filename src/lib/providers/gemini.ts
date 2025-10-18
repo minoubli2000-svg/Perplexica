@@ -1,7 +1,4 @@
-import {
-  ChatGoogleGenerativeAI,
-  GoogleGenerativeAIEmbeddings,
-} from '@langchain/google-genai';
+import { ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { getGeminiApiKey } from '../config';
 import { ChatModel, EmbeddingModel } from '.';
 

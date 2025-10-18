@@ -51,10 +51,7 @@ const Input = ({ className, isSaving, onSave, ...restProps }: InputProps) => {
       />
       {isSaving && (
         <div className="absolute right-3 top-1/2 -translate-y-1/2">
-          <Loader2
-            size={16}
-            className="animate-spin text-black/70 dark:text-white/70"
-          />
+          <Loader2 size={16} className="animate-spin text-black/70 dark:text-white/70" />
         </div>
       )}
     </div>
@@ -66,12 +63,7 @@ interface TextareaProps extends React.InputHTMLAttributes<HTMLTextAreaElement> {
   onSave?: (value: string) => void;
 }
 
-const Textarea = ({
-  className,
-  isSaving,
-  onSave,
-  ...restProps
-}: TextareaProps) => {
+const Textarea = ({ className, isSaving, onSave, ...restProps }: TextareaProps) => {
   return (
     <div className="relative">
       <textarea
@@ -83,10 +75,7 @@ const Textarea = ({
       />
       {isSaving && (
         <div className="absolute right-3 top-3">
-          <Loader2
-            size={16}
-            className="animate-spin text-black/70 dark:text-white/70"
-          />
+          <Loader2 size={16} className="animate-spin text-black/70 dark:text-white/70" />
         </div>
       )}
     </div>
@@ -117,13 +106,7 @@ const Select = ({
   );
 };
 
-const SettingsSection = ({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) => (
+const SettingsSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="flex flex-col space-y-4 p-4 bg-light-secondary/50 dark:bg-dark-secondary/50 rounded-xl border border-light-200 dark:border-dark-200">
     <h2 className="text-black/90 dark:text-white/90 font-medium">{title}</h2>
     {children}
@@ -133,27 +116,18 @@ const SettingsSection = ({
 const Page = () => {
   const [config, setConfig] = useState<SettingsType | null>(null);
   const [chatModels, setChatModels] = useState<Record<string, any>>({});
-  const [embeddingModels, setEmbeddingModels] = useState<Record<string, any>>(
-    {},
-  );
-  const [selectedChatModelProvider, setSelectedChatModelProvider] = useState<
+  const [embeddingModels, setEmbeddingModels] = useState<Record<string, any>>({});
+  const [selectedChatModelProvider, setSelectedChatModelProvider] = useState<string | null>(null);
+  const [selectedChatModel, setSelectedChatModel] = useState<string | null>(null);
+  const [selectedEmbeddingModelProvider, setSelectedEmbeddingModelProvider] = useState<
     string | null
   >(null);
-  const [selectedChatModel, setSelectedChatModel] = useState<string | null>(
-    null,
-  );
-  const [selectedEmbeddingModelProvider, setSelectedEmbeddingModelProvider] =
-    useState<string | null>(null);
-  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<
-    string | null
-  >(null);
+  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [automaticImageSearch, setAutomaticImageSearch] = useState(false);
   const [automaticVideoSearch, setAutomaticVideoSearch] = useState(false);
   const [systemInstructions, setSystemInstructions] = useState<string>('');
-  const [measureUnit, setMeasureUnit] = useState<'Imperial' | 'Metric'>(
-    'Metric',
-  );
+  const [measureUnit, setMeasureUnit] = useState<'Imperial' | 'Metric'>('Metric');
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -168,32 +142,23 @@ const Page = () => {
       setConfig(data);
 
       const chatModelProvidersKeys = Object.keys(data.chatModelProviders || {});
-      const embeddingModelProvidersKeys = Object.keys(
-        data.embeddingModelProviders || {},
-      );
+      const embeddingModelProvidersKeys = Object.keys(data.embeddingModelProviders || {});
 
       const defaultChatModelProvider =
         chatModelProvidersKeys.length > 0 ? chatModelProvidersKeys[0] : '';
       const defaultEmbeddingModelProvider =
-        embeddingModelProvidersKeys.length > 0
-          ? embeddingModelProvidersKeys[0]
-          : '';
+        embeddingModelProvidersKeys.length > 0 ? embeddingModelProvidersKeys[0] : '';
 
       const chatModelProvider =
-        localStorage.getItem('chatModelProvider') ||
-        defaultChatModelProvider ||
-        '';
+        localStorage.getItem('chatModelProvider') || defaultChatModelProvider || '';
       const chatModel =
         localStorage.getItem('chatModel') ||
-        (data.chatModelProviders &&
-        data.chatModelProviders[chatModelProvider]?.length > 0
+        (data.chatModelProviders && data.chatModelProviders[chatModelProvider]?.length > 0
           ? data.chatModelProviders[chatModelProvider][0].name
           : undefined) ||
         '';
       const embeddingModelProvider =
-        localStorage.getItem('embeddingModelProvider') ||
-        defaultEmbeddingModelProvider ||
-        '';
+        localStorage.getItem('embeddingModelProvider') || defaultEmbeddingModelProvider || '';
       const embeddingModel =
         localStorage.getItem('embeddingModel') ||
         (data.embeddingModelProviders &&
@@ -207,18 +172,12 @@ const Page = () => {
       setChatModels(data.chatModelProviders || {});
       setEmbeddingModels(data.embeddingModelProviders || {});
 
-      setAutomaticImageSearch(
-        localStorage.getItem('autoImageSearch') === 'true',
-      );
-      setAutomaticVideoSearch(
-        localStorage.getItem('autoVideoSearch') === 'true',
-      );
+      setAutomaticImageSearch(localStorage.getItem('autoImageSearch') === 'true');
+      setAutomaticVideoSearch(localStorage.getItem('autoVideoSearch') === 'true');
 
       setSystemInstructions(localStorage.getItem('systemInstructions')!);
 
-      setMeasureUnit(
-        localStorage.getItem('measureUnit')! as 'Imperial' | 'Metric',
-      );
+      setMeasureUnit(localStorage.getItem('measureUnit')! as 'Imperial' | 'Metric');
 
       setIsLoading(false);
     };
@@ -249,10 +208,7 @@ const Page = () => {
 
       setConfig(updatedConfig);
 
-      if (
-        key.toLowerCase().includes('api') ||
-        key.toLowerCase().includes('url')
-      ) {
+      if (key.toLowerCase().includes('api') || key.toLowerCase().includes('url')) {
         const res = await fetch(`/api/config`, {
           headers: {
             'Content-Type': 'application/json',
@@ -288,22 +244,15 @@ const Page = () => {
             !Array.isArray(data.chatModelProviders[currentChatProvider]) ||
             data.chatModelProviders[currentChatProvider].length === 0)
         ) {
-          const firstValidProvider = Object.entries(
-            data.chatModelProviders || {},
-          ).find(
+          const firstValidProvider = Object.entries(data.chatModelProviders || {}).find(
             ([_, models]) => Array.isArray(models) && models.length > 0,
           )?.[0];
 
           if (firstValidProvider) {
             setSelectedChatModelProvider(firstValidProvider);
-            setSelectedChatModel(
-              data.chatModelProviders[firstValidProvider][0].name,
-            );
+            setSelectedChatModel(data.chatModelProviders[firstValidProvider][0].name);
             localStorage.setItem('chatModelProvider', firstValidProvider);
-            localStorage.setItem(
-              'chatModel',
-              data.chatModelProviders[firstValidProvider][0].name,
-            );
+            localStorage.setItem('chatModel', data.chatModelProviders[firstValidProvider][0].name);
           } else {
             setSelectedChatModelProvider(null);
             setSelectedChatModel(null);
@@ -313,14 +262,11 @@ const Page = () => {
         }
 
         const currentEmbeddingProvider = selectedEmbeddingModelProvider;
-        const newEmbeddingProviders = Object.keys(
-          data.embeddingModelProviders || {},
-        );
+        const newEmbeddingProviders = Object.keys(data.embeddingModelProviders || {});
 
         if (!currentEmbeddingProvider && newEmbeddingProviders.length > 0) {
           const firstProvider = newEmbeddingProviders[0];
-          const firstModel =
-            data.embeddingModelProviders[firstProvider]?.[0]?.name;
+          const firstModel = data.embeddingModelProviders[firstProvider]?.[0]?.name;
 
           if (firstModel) {
             setSelectedEmbeddingModelProvider(firstProvider);
@@ -332,22 +278,16 @@ const Page = () => {
           currentEmbeddingProvider &&
           (!data.embeddingModelProviders ||
             !data.embeddingModelProviders[currentEmbeddingProvider] ||
-            !Array.isArray(
-              data.embeddingModelProviders[currentEmbeddingProvider],
-            ) ||
+            !Array.isArray(data.embeddingModelProviders[currentEmbeddingProvider]) ||
             data.embeddingModelProviders[currentEmbeddingProvider].length === 0)
         ) {
-          const firstValidProvider = Object.entries(
-            data.embeddingModelProviders || {},
-          ).find(
+          const firstValidProvider = Object.entries(data.embeddingModelProviders || {}).find(
             ([_, models]) => Array.isArray(models) && models.length > 0,
           )?.[0];
 
           if (firstValidProvider) {
             setSelectedEmbeddingModelProvider(firstValidProvider);
-            setSelectedEmbeddingModel(
-              data.embeddingModelProviders[firstValidProvider][0].name,
-            );
+            setSelectedEmbeddingModel(data.embeddingModelProviders[firstValidProvider][0].name);
             localStorage.setItem('embeddingModelProvider', firstValidProvider);
             localStorage.setItem(
               'embeddingModel',
@@ -430,15 +370,11 @@ const Page = () => {
           <div className="flex flex-col space-y-6 pb-28 lg:pb-8">
             <SettingsSection title="Preferences">
               <div className="flex flex-col space-y-1">
-                <p className="text-black/70 dark:text-white/70 text-sm">
-                  Theme
-                </p>
+                <p className="text-black/70 dark:text-white/70 text-sm">Theme</p>
                 <ThemeSwitcher />
               </div>
               <div className="flex flex-col space-y-1">
-                <p className="text-black/70 dark:text-white/70 text-sm">
-                  Measurement Units
-                </p>
+                <p className="text-black/70 dark:text-white/70 text-sm">Measurement Units</p>
                 <Select
                   value={measureUnit ?? undefined}
                   onChange={(e) => {
@@ -464,18 +400,14 @@ const Page = () => {
                 <div className="flex items-center justify-between p-3 bg-light-secondary dark:bg-dark-secondary rounded-lg hover:bg-light-200 dark:hover:bg-dark-200 transition-colors">
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-light-200 dark:bg-dark-200 rounded-lg">
-                      <ImagesIcon
-                        size={18}
-                        className="text-black/70 dark:text-white/70"
-                      />
+                      <ImagesIcon size={18} className="text-black/70 dark:text-white/70" />
                     </div>
                     <div>
                       <p className="text-sm text-black/90 dark:text-white/90 font-medium">
                         Automatic Image Search
                       </p>
                       <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
-                        Automatically search for relevant images in chat
-                        responses
+                        Automatically search for relevant images in chat responses
                       </p>
                     </div>
                   </div>
@@ -486,17 +418,13 @@ const Page = () => {
                       saveConfig('automaticImageSearch', checked);
                     }}
                     className={cn(
-                      automaticImageSearch
-                        ? 'bg-[#24A0ED]'
-                        : 'bg-light-200 dark:bg-dark-200',
+                      automaticImageSearch ? 'bg-[#24A0ED]' : 'bg-light-200 dark:bg-dark-200',
                       'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
                     )}
                   >
                     <span
                       className={cn(
-                        automaticImageSearch
-                          ? 'translate-x-6'
-                          : 'translate-x-1',
+                        automaticImageSearch ? 'translate-x-6' : 'translate-x-1',
                         'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
                       )}
                     />
@@ -506,18 +434,14 @@ const Page = () => {
                 <div className="flex items-center justify-between p-3 bg-light-secondary dark:bg-dark-secondary rounded-lg hover:bg-light-200 dark:hover:bg-dark-200 transition-colors">
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-light-200 dark:bg-dark-200 rounded-lg">
-                      <VideoIcon
-                        size={18}
-                        className="text-black/70 dark:text-white/70"
-                      />
+                      <VideoIcon size={18} className="text-black/70 dark:text-white/70" />
                     </div>
                     <div>
                       <p className="text-sm text-black/90 dark:text-white/90 font-medium">
                         Automatic Video Search
                       </p>
                       <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
-                        Automatically search for relevant videos in chat
-                        responses
+                        Automatically search for relevant videos in chat responses
                       </p>
                     </div>
                   </div>
@@ -528,17 +452,13 @@ const Page = () => {
                       saveConfig('automaticVideoSearch', checked);
                     }}
                     className={cn(
-                      automaticVideoSearch
-                        ? 'bg-[#24A0ED]'
-                        : 'bg-light-200 dark:bg-dark-200',
+                      automaticVideoSearch ? 'bg-[#24A0ED]' : 'bg-light-200 dark:bg-dark-200',
                       'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
                     )}
                   >
                     <span
                       className={cn(
-                        automaticVideoSearch
-                          ? 'translate-x-6'
-                          : 'translate-x-1',
+                        automaticVideoSearch ? 'translate-x-6' : 'translate-x-1',
                         'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
                       )}
                     />
@@ -564,145 +484,124 @@ const Page = () => {
               {config.chatModelProviders && (
                 <div className="flex flex-col space-y-4">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-black/70 dark:text-white/70 text-sm">
-                      Chat Model Provider
-                    </p>
+                    <p className="text-black/70 dark:text-white/70 text-sm">Chat Model Provider</p>
                     <Select
                       value={selectedChatModelProvider ?? undefined}
                       onChange={(e) => {
                         const value = e.target.value;
                         setSelectedChatModelProvider(value);
                         saveConfig('chatModelProvider', value);
-                        const firstModel =
-                          config.chatModelProviders[value]?.[0]?.name;
+                        const firstModel = config.chatModelProviders[value]?.[0]?.name;
                         if (firstModel) {
                           setSelectedChatModel(firstModel);
                           saveConfig('chatModel', firstModel);
                         }
                       }}
-                      options={Object.keys(config.chatModelProviders).map(
-                        (provider) => ({
-                          value: provider,
-                          label:
-                            (PROVIDER_METADATA as any)[provider]?.displayName ||
-                            provider.charAt(0).toUpperCase() +
-                              provider.slice(1),
-                        }),
-                      )}
+                      options={Object.keys(config.chatModelProviders).map((provider) => ({
+                        value: provider,
+                        label:
+                          (PROVIDER_METADATA as any)[provider]?.displayName ||
+                          provider.charAt(0).toUpperCase() + provider.slice(1),
+                      }))}
                     />
                   </div>
 
-                  {selectedChatModelProvider &&
-                    selectedChatModelProvider != 'custom_openai' && (
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-black/70 dark:text-white/70 text-sm">
-                          Chat Model
-                        </p>
-                        <Select
-                          value={selectedChatModel ?? undefined}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setSelectedChatModel(value);
-                            saveConfig('chatModel', value);
-                          }}
-                          options={(() => {
-                            const chatModelProvider =
-                              config.chatModelProviders[
-                                selectedChatModelProvider
-                              ];
-                            return chatModelProvider
-                              ? chatModelProvider.length > 0
-                                ? chatModelProvider.map((model) => ({
-                                    value: model.name,
-                                    label: model.displayName,
-                                  }))
-                                : [
-                                    {
-                                      value: '',
-                                      label: 'No models available',
-                                      disabled: true,
-                                    },
-                                  ]
+                  {selectedChatModelProvider && selectedChatModelProvider != 'custom_openai' && (
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-black/70 dark:text-white/70 text-sm">Chat Model</p>
+                      <Select
+                        value={selectedChatModel ?? undefined}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setSelectedChatModel(value);
+                          saveConfig('chatModel', value);
+                        }}
+                        options={(() => {
+                          const chatModelProvider =
+                            config.chatModelProviders[selectedChatModelProvider];
+                          return chatModelProvider
+                            ? chatModelProvider.length > 0
+                              ? chatModelProvider.map((model) => ({
+                                  value: model.name,
+                                  label: model.displayName,
+                                }))
                               : [
                                   {
                                     value: '',
-                                    label:
-                                      'Invalid provider, please check backend logs',
+                                    label: 'No models available',
                                     disabled: true,
                                   },
-                                ];
-                          })()}
-                        />
-                      </div>
-                    )}
+                                ]
+                            : [
+                                {
+                                  value: '',
+                                  label: 'Invalid provider, please check backend logs',
+                                  disabled: true,
+                                },
+                              ];
+                        })()}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
-              {selectedChatModelProvider &&
-                selectedChatModelProvider === 'custom_openai' && (
-                  <div className="flex flex-col space-y-4">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-black/70 dark:text-white/70 text-sm">
-                        Model Name
-                      </p>
-                      <Input
-                        type="text"
-                        placeholder="Model name"
-                        value={config.customOpenaiModelName}
-                        isSaving={savingStates['customOpenaiModelName']}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setConfig((prev) => ({
-                            ...prev!,
-                            customOpenaiModelName: e.target.value,
-                          }));
-                        }}
-                        onSave={(value) =>
-                          saveConfig('customOpenaiModelName', value)
-                        }
-                      />
-                    </div>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-black/70 dark:text-white/70 text-sm">
-                        Custom OpenAI API Key
-                      </p>
-                      <Input
-                        type="text"
-                        placeholder="Custom OpenAI API Key"
-                        value={config.customOpenaiApiKey}
-                        isSaving={savingStates['customOpenaiApiKey']}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setConfig((prev) => ({
-                            ...prev!,
-                            customOpenaiApiKey: e.target.value,
-                          }));
-                        }}
-                        onSave={(value) =>
-                          saveConfig('customOpenaiApiKey', value)
-                        }
-                      />
-                    </div>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-black/70 dark:text-white/70 text-sm">
-                        Custom OpenAI Base URL
-                      </p>
-                      <Input
-                        type="text"
-                        placeholder="Custom OpenAI Base URL"
-                        value={config.customOpenaiApiUrl}
-                        isSaving={savingStates['customOpenaiApiUrl']}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setConfig((prev) => ({
-                            ...prev!,
-                            customOpenaiApiUrl: e.target.value,
-                          }));
-                        }}
-                        onSave={(value) =>
-                          saveConfig('customOpenaiApiUrl', value)
-                        }
-                      />
-                    </div>
+              {selectedChatModelProvider && selectedChatModelProvider === 'custom_openai' && (
+                <div className="flex flex-col space-y-4">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-black/70 dark:text-white/70 text-sm">Model Name</p>
+                    <Input
+                      type="text"
+                      placeholder="Model name"
+                      value={config.customOpenaiModelName}
+                      isSaving={savingStates['customOpenaiModelName']}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        setConfig((prev) => ({
+                          ...prev!,
+                          customOpenaiModelName: e.target.value,
+                        }));
+                      }}
+                      onSave={(value) => saveConfig('customOpenaiModelName', value)}
+                    />
                   </div>
-                )}
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-black/70 dark:text-white/70 text-sm">
+                      Custom OpenAI API Key
+                    </p>
+                    <Input
+                      type="text"
+                      placeholder="Custom OpenAI API Key"
+                      value={config.customOpenaiApiKey}
+                      isSaving={savingStates['customOpenaiApiKey']}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        setConfig((prev) => ({
+                          ...prev!,
+                          customOpenaiApiKey: e.target.value,
+                        }));
+                      }}
+                      onSave={(value) => saveConfig('customOpenaiApiKey', value)}
+                    />
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-black/70 dark:text-white/70 text-sm">
+                      Custom OpenAI Base URL
+                    </p>
+                    <Input
+                      type="text"
+                      placeholder="Custom OpenAI Base URL"
+                      value={config.customOpenaiApiUrl}
+                      isSaving={savingStates['customOpenaiApiUrl']}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        setConfig((prev) => ({
+                          ...prev!,
+                          customOpenaiApiUrl: e.target.value,
+                        }));
+                      }}
+                      onSave={(value) => saveConfig('customOpenaiApiUrl', value)}
+                    />
+                  </div>
+                </div>
+              )}
 
               {config.embeddingModelProviders && (
                 <div className="flex flex-col space-y-4 mt-4 pt-4 border-t border-light-200 dark:border-dark-200">
@@ -716,30 +615,24 @@ const Page = () => {
                         const value = e.target.value;
                         setSelectedEmbeddingModelProvider(value);
                         saveConfig('embeddingModelProvider', value);
-                        const firstModel =
-                          config.embeddingModelProviders[value]?.[0]?.name;
+                        const firstModel = config.embeddingModelProviders[value]?.[0]?.name;
                         if (firstModel) {
                           setSelectedEmbeddingModel(firstModel);
                           saveConfig('embeddingModel', firstModel);
                         }
                       }}
-                      options={Object.keys(config.embeddingModelProviders).map(
-                        (provider) => ({
-                          value: provider,
-                          label:
-                            (PROVIDER_METADATA as any)[provider]?.displayName ||
-                            provider.charAt(0).toUpperCase() +
-                              provider.slice(1),
-                        }),
-                      )}
+                      options={Object.keys(config.embeddingModelProviders).map((provider) => ({
+                        value: provider,
+                        label:
+                          (PROVIDER_METADATA as any)[provider]?.displayName ||
+                          provider.charAt(0).toUpperCase() + provider.slice(1),
+                      }))}
                     />
                   </div>
 
                   {selectedEmbeddingModelProvider && (
                     <div className="flex flex-col space-y-1">
-                      <p className="text-black/70 dark:text-white/70 text-sm">
-                        Embedding Model
-                      </p>
+                      <p className="text-black/70 dark:text-white/70 text-sm">Embedding Model</p>
                       <Select
                         value={selectedEmbeddingModel ?? undefined}
                         onChange={(e) => {
@@ -749,9 +642,7 @@ const Page = () => {
                         }}
                         options={(() => {
                           const embeddingModelProvider =
-                            config.embeddingModelProviders[
-                              selectedEmbeddingModelProvider
-                            ];
+                            config.embeddingModelProviders[selectedEmbeddingModelProvider];
                           return embeddingModelProvider
                             ? embeddingModelProvider.length > 0
                               ? embeddingModelProvider.map((model) => ({
@@ -768,8 +659,7 @@ const Page = () => {
                             : [
                                 {
                                   value: '',
-                                  label:
-                                    'Invalid provider, please check backend logs',
+                                  label: 'Invalid provider, please check backend logs',
                                   disabled: true,
                                 },
                               ];
@@ -784,9 +674,7 @@ const Page = () => {
             <SettingsSection title="API Keys">
               <div className="flex flex-col space-y-4">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    OpenAI API Key
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">OpenAI API Key</p>
                   <Input
                     type="text"
                     placeholder="OpenAI API Key"
@@ -803,9 +691,7 @@ const Page = () => {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    Ollama API URL
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">Ollama API URL</p>
                   <Input
                     type="text"
                     placeholder="Ollama API URL"
@@ -841,9 +727,7 @@ const Page = () => {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    GROQ API Key
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">GROQ API Key</p>
                   <Input
                     type="text"
                     placeholder="GROQ API Key"
@@ -860,9 +744,7 @@ const Page = () => {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    Anthropic API Key
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">Anthropic API Key</p>
                   <Input
                     type="text"
                     placeholder="Anthropic API key"
@@ -879,9 +761,7 @@ const Page = () => {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    Gemini API Key
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">Gemini API Key</p>
                   <Input
                     type="text"
                     placeholder="Gemini API key"
@@ -898,9 +778,7 @@ const Page = () => {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    Deepseek API Key
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">Deepseek API Key</p>
                   <Input
                     type="text"
                     placeholder="Deepseek API Key"
@@ -917,9 +795,7 @@ const Page = () => {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    AI/ML API Key
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">AI/ML API Key</p>
                   <Input
                     type="text"
                     placeholder="AI/ML API Key"
@@ -936,9 +812,7 @@ const Page = () => {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    LM Studio API URL
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">LM Studio API URL</p>
                   <Input
                     type="text"
                     placeholder="LM Studio API URL"
@@ -959,9 +833,7 @@ const Page = () => {
             <SettingsSection title="Lemonade">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-black/70 dark:text-white/70 text-sm">
-                    Lemonade API URL
-                  </p>
+                  <p className="text-black/70 dark:text-white/70 text-sm">Lemonade API URL</p>
                   <Input
                     type="text"
                     placeholder="Lemonade API URL"

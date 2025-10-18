@@ -34,7 +34,9 @@
 }
 
 /* Fond blanc partout, sans cadre rouge */
-html, body, #root {
+html,
+body,
+#root {
   @apply bg-white min-h-screen min-w-full box-border;
 }
 
@@ -44,7 +46,8 @@ html, body, #root {
 }
 
 /* Sidebar/document si présente, tu peux tout masquer par défaut */
-.library-bar, .side-bar {
+.library-bar,
+.side-bar {
   @apply hidden;
 }
 .themis-toolbar {
@@ -52,4 +55,3 @@ html, body, #root {
   z-index: 1000;
   position: relative;
 }
-

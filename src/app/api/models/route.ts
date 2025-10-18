@@ -12,15 +12,13 @@ export const GET = async (req: Request) => {
 
     Object.keys(chatModelProviders).forEach((provider) => {
       Object.keys(chatModelProviders[provider]).forEach((model) => {
-        delete (chatModelProviders[provider][model] as { model?: unknown })
-          .model;
+        delete (chatModelProviders[provider][model] as { model?: unknown }).model;
       });
     });
 
     Object.keys(embeddingModelProviders).forEach((provider) => {
       Object.keys(embeddingModelProviders[provider]).forEach((model) => {
-        delete (embeddingModelProviders[provider][model] as { model?: unknown })
-          .model;
+        delete (embeddingModelProviders[provider][model] as { model?: unknown }).model;
       });
     });
 

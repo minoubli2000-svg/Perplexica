@@ -215,10 +215,7 @@ const handleHistorySave = async (
     await db
       .delete(messagesSchema)
       .where(
-        and(
-          gt(messagesSchema.id, messageExists.id),
-          eq(messagesSchema.chatId, message.chatId),
-        ),
+        and(gt(messagesSchema.id, messageExists.id), eq(messagesSchema.chatId, message.chatId)),
       )
       .execute();
   }
@@ -254,22 +251,15 @@ export const POST = async (req: Request) => {
     ]);
 
     const chatModelProvider =
-      chatModelProviders[
-        body.chatModel?.provider || Object.keys(chatModelProviders)[0]
-      ];
-    const chatModel =
-      chatModelProvider[
-        body.chatModel?.name || Object.keys(chatModelProvider)[0]
-      ];
+      chatModelProviders[body.chatModel?.provider || Object.keys(chatModelProviders)[0]];
+    const chatModel = chatModelProvider[body.chatModel?.name || Object.keys(chatModelProvider)[0]];
 
     const embeddingProvider =
       embeddingModelProviders[
         body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0]
       ];
     const embeddingModel =
-      embeddingProvider[
-        body.embeddingModel?.name || Object.keys(embeddingProvider)[0]
-      ];
+      embeddingProvider[body.embeddingModel?.name || Object.keys(embeddingProvider)[0]];
 
     let llm: BaseChatModel | undefined;
     let embedding = embeddingModel.model;
@@ -292,14 +282,10 @@ export const POST = async (req: Request) => {
     }
 
     if (!embedding) {
-      return Response.json(
-        { error: 'Invalid embedding model' },
-        { status: 400 },
-      );
+      return Response.json({ error: 'Invalid embedding model' }, { status: 400 });
     }
 
-    const humanMessageId =
-      message.messageId ?? crypto.randomBytes(7).toString('hex');
+    const humanMessageId = message.messageId ?? crypto.randomBytes(7).toString('hex');
 
     const history: BaseMessage[] = body.history.map((msg) => {
       if (msg[0] === 'human') {

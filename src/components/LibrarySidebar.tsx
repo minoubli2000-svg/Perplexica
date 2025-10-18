@@ -11,13 +11,14 @@ export default function LibrarySidebar({ onStructureChange }) {
   // Charge la structure au montage du composant
   useEffect(() => {
     setLoading(true);
-    api.getLibraryStructure()
-      .then(data => {
+    api
+      .getLibraryStructure()
+      .then((data) => {
         const struct = data.structure || data;
         setStructure(struct);
         onStructureChange?.(struct);
       })
-      .catch(err => console.error('Erreur getLibraryStructure:', err))
+      .catch((err) => console.error('Erreur getLibraryStructure:', err))
       .finally(() => setLoading(false));
   }, [onStructureChange]);
 
@@ -38,7 +39,7 @@ export default function LibrarySidebar({ onStructureChange }) {
             <div key={cat} className="ml-2 mb-2">
               <strong>{cat}</strong>
               <ul className="list-disc list-inside">
-                {files.map(filename => (
+                {files.map((filename) => (
                   <li key={filename}>{filename}</li>
                 ))}
               </ul>

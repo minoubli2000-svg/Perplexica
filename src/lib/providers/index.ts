@@ -6,11 +6,7 @@ import {
   PROVIDER_INFO as OpenAIInfo,
   PROVIDER_INFO,
 } from './openai';
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '../config';
+import { getCustomOpenaiApiKey, getCustomOpenaiApiUrl, getCustomOpenaiModelName } from '../config';
 import { ChatOpenAI } from '@langchain/openai';
 import {
   loadOllamaChatModels,
@@ -18,10 +14,7 @@ import {
   PROVIDER_INFO as OllamaInfo,
 } from './ollama';
 import { loadGroqChatModels, PROVIDER_INFO as GroqInfo } from './groq';
-import {
-  loadAnthropicChatModels,
-  PROVIDER_INFO as AnthropicInfo,
-} from './anthropic';
+import { loadAnthropicChatModels, PROVIDER_INFO as AnthropicInfo } from './anthropic';
 import {
   loadGeminiChatModels,
   loadGeminiEmbeddingModels,
@@ -31,10 +24,7 @@ import {
   loadTransformersEmbeddingsModels,
   PROVIDER_INFO as TransformersInfo,
 } from './transformers';
-import {
-  loadDeepseekChatModels,
-  PROVIDER_INFO as DeepseekInfo,
-} from './deepseek';
+import { loadDeepseekChatModels, PROVIDER_INFO as DeepseekInfo } from './deepseek';
 import {
   loadAimlApiChatModels,
   loadAimlApiEmbeddingModels,
@@ -78,10 +68,7 @@ export interface EmbeddingModel {
   model: Embeddings;
 }
 
-export const chatModelProviders: Record<
-  string,
-  () => Promise<Record<string, ChatModel>>
-> = {
+export const chatModelProviders: Record<string, () => Promise<Record<string, ChatModel>>> = {
   openai: loadOpenAIChatModels,
   ollama: loadOllamaChatModels,
   groq: loadGroqChatModels,
@@ -138,10 +125,9 @@ export const getAvailableChatModelProviders = async () => {
                   'o3-mini',
                   'o4-mini',
                 ];
-                const isTemperatureRestricted =
-                  temperatureRestrictedModels.some((restrictedModel) =>
-                    customOpenAiModelName.includes(restrictedModel),
-                  );
+                const isTemperatureRestricted = temperatureRestrictedModels.some(
+                  (restrictedModel) => customOpenAiModelName.includes(restrictedModel),
+                );
                 return isTemperatureRestricted ? {} : { temperature: 0.7 };
               })(),
               configuration: {

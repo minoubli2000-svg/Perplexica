@@ -57,13 +57,22 @@ export default function RootLayout({ children }: RootLayoutProps) {
 
           {/* Contrôles fenêtre Electron */}
           <div className="flex items-center space-x-2" style={windowControlsStyle}>
-            <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" onClick={() => window.electronAPI?.minimizeWindow()}>
+            <button
+              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+              onClick={() => window.electronAPI?.minimizeWindow()}
+            >
               <FaMinus />
             </button>
-            <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" onClick={() => window.electronAPI?.maximizeWindow()}>
+            <button
+              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+              onClick={() => window.electronAPI?.maximizeWindow()}
+            >
               <FaWindowMaximize />
             </button>
-            <button className="p-1 hover:bg-red-500 dark:hover:bg-red-700 rounded" onClick={() => window.electronAPI?.closeWindow()}>
+            <button
+              className="p-1 hover:bg-red-500 dark:hover:bg-red-700 rounded"
+              onClick={() => window.electronAPI?.closeWindow()}
+            >
               <FaTimes />
             </button>
           </div>
@@ -77,4 +86,3 @@ export default function RootLayout({ children }: RootLayoutProps) {
     </html>
   );
 }
-

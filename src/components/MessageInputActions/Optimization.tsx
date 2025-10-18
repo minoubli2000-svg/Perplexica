@@ -1,11 +1,6 @@
 import { ChevronDown, Sliders, Star, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-  Transition,
-} from '@headlessui/react';
+import { Popover, PopoverButton, PopoverPanel, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { useChat } from '@/lib/hooks/useChat';
 
@@ -45,15 +40,9 @@ const Optimization = () => {
         className="p-2 text-black/50 dark:text-white/50 rounded-xl hover:bg-light-secondary dark:hover:bg-dark-secondary active:scale-95 transition duration-200 hover:text-black dark:hover:text-white"
       >
         <div className="flex flex-row items-center space-x-1">
-          {
-            OptimizationModes.find((mode) => mode.key === optimizationMode)
-              ?.icon
-          }
+          {OptimizationModes.find((mode) => mode.key === optimizationMode)?.icon}
           <p className="text-xs font-medium">
-            {
-              OptimizationModes.find((mode) => mode.key === optimizationMode)
-                ?.title
-            }
+            {OptimizationModes.find((mode) => mode.key === optimizationMode)?.title}
           </p>
           <ChevronDown size={20} />
         </div>
@@ -86,9 +75,7 @@ const Optimization = () => {
                   {mode.icon}
                   <p className="text-sm font-medium">{mode.title}</p>
                 </div>
-                <p className="text-black/70 dark:text-white/70 text-xs">
-                  {mode.description}
-                </p>
+                <p className="text-black/70 dark:text-white/70 text-xs">{mode.description}</p>
               </PopoverButton>
             ))}
           </div>

@@ -22,9 +22,7 @@ const ThemeSwitcher = ({ className }: { className?: string }) => {
 
   useEffect(() => {
     if (isTheme('system')) {
-      const preferDarkScheme = window.matchMedia(
-        '(prefers-color-scheme: dark)',
-      );
+      const preferDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
 
       const detectThemeChange = (event: MediaQueryListEvent) => {
         const theme: Theme = event.matches ? 'dark' : 'light';

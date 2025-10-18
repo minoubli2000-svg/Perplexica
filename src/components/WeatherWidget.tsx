@@ -27,11 +27,7 @@ const WeatherWidget = () => {
   };
 
   const getLocation = async (
-    callback: (location: {
-      latitude: number;
-      longitude: number;
-      city: string;
-    }) => void,
+    callback: (location: { latitude: number; longitude: number; city: string }) => void,
   ) => {
     if (navigator.geolocation) {
       const result = await navigator.permissions.query({
@@ -155,9 +151,7 @@ const WeatherWidget = () => {
             </span>
             <div className="flex flex-row justify-between w-full mt-auto pt-2 border-t border-light-200/50 dark:border-dark-200/50 text-xs text-black/50 dark:text-white/50 font-medium">
               <span>Humidity {data.humidity}%</span>
-              <span className="font-semibold text-black/70 dark:text-white/70">
-                Now
-              </span>
+              <span className="font-semibold text-black/70 dark:text-white/70">Now</span>
             </div>
           </div>
         </>

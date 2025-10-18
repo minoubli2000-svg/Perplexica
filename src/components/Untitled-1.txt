@@ -1,0 +1,69 @@
+{/* Modal Extraction Flottante */}
+{showExtractModal && extractedText && (
+  <DraggableModal onClose={() => setShowExtractModal(false)} title="Extraction de Fichier">
+    <div className="p-4 space-y-4">
+      <h4 className="font-semibold">Texte Extrait :</h4>
+      <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded max-h-48 overflow-y-auto whitespace-pre-wrap text-sm">
+        {extractedText}
+      </pre>
+      <div className="flex gap-2 justify-end">
+        <ThemisButton onClick={handleInjectToIA} variant="primary" icon={<FaBrain />}>
+          Injecter à l'IA
+        </ThemisButton>
+        <ThemisButton onClick={handleCopyToLibrary} variant="success" icon={<FaFolderOpen />}>
+          Copier dans Bibliothèque
+        </ThemisButton>
+        <ThemisButton onClick={() => setShowExtractModal(false)} variant="outline" icon={<FaTimes />}>
+          Annuler
+        </ThemisButton>
+      </div>
+    </div>
+  </DraggableModal>
+)}
+
+{/* Modal Extraction - Texte sélectionnable */}
+{showExtractModal && extractedText.trim() && (
+  <DraggableModal 
+    onClose={() => { setShowExtractModal(false); setExtractedText(''); }} 
+    title="Extraction - Choisissez le Texte"
+  >
+    <div className="p-4 space-y-4">
+      <h4 className="font-semibold text-gray-800 dark:text-gray-200">Texte Extrait (cliquez pour sélectionner) :</h4>
+      <div className="space-y-2">
+        <textarea
+          value={extractedText}
+          readOnly
+          className="w-full h-32 bg-gray-100 dark:bg-gray-700 p-2 rounded border text-sm font-mono resize-none focus:outline-none"
+          placeholder="Cliquez ici pour sélectionner le texte, puis Ctrl+C pour copier"
+          onClick={(e) => {
+            e.currentTarget.focus();
+            e.currentTarget.select(); // Sélectionne tout au clic
+          }}
+          onMouseUp={(e) => e.currentTarget.select()} // Sélection au clic-droit/souris
+        />
+        <ThemisButton 
+          onClick={(e) => {
+            const textarea = e.currentTarget.previousElementSibling as HTMLTextAreaElement;
+            if (textarea) textarea.select();
+          }} 
+          variant="outline" 
+          size="sm" 
+          className="w-full"
+        >
+          Sélectionner tout (Ctrl+A)
+        </ThemisButton>
+      </div>
+      <div className="flex flex-wrap gap-2 justify-end">
+        <ThemisButton onClick={handleInjectToIA} variant="primary" icon={<FaRobot />}>
+          Injecter à l'IA
+        </ThemisButton>
+        <ThemisButton onClick={handleCopyToLibrary} variant="success" icon={<FaRegFolderOpen />}>
+          Copier Bibliothèque
+        </ThemisButton>
+        <ThemisButton onClick={() => { setShowExtractModal(false); setExtractedText(''); }} variant="outline" icon={<FaTimes />}>
+          Annuler
+        </ThemisButton>
+      </div>
+    </div>
+  </DraggableModal>
+)}

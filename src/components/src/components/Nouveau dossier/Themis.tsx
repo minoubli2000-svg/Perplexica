@@ -1,32 +1,32 @@
 'use client';
 
 // ===== IMPORTS EXHAUSTIFS =====
-import React, { 
-  useState, 
-  useEffect, 
-  useRef, 
-  useMemo, 
-  useCallback, 
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
   useId,
-  type ChangeEvent, 
+  type ChangeEvent,
   type MouseEvent,
   type FormEvent,
-  type KeyboardEvent 
+  type KeyboardEvent,
 } from 'react';
-import { 
-  FaBalanceScale, 
-  FaTimes, 
-  FaMinus, 
+import {
+  FaBalanceScale,
+  FaTimes,
+  FaMinus,
   FaWindowMaximize,
-  FaCopy, 
-  FaMoon, 
-  FaSun, 
-  FaRegFilePdf, 
+  FaCopy,
+  FaMoon,
+  FaSun,
+  FaRegFilePdf,
   FaFileExport,
-  FaPlus, 
-  FaRegFolderOpen, 
-  FaTrashAlt, 
-  FaWifi, 
+  FaPlus,
+  FaRegFolderOpen,
+  FaTrashAlt,
+  FaWifi,
   FaBan,
   FaUpload,
   FaDownload,
@@ -42,7 +42,7 @@ import {
   FaSort,
   FaSyncAlt,
   FaEye,
-  FaEyeSlash
+  FaEyeSlash,
 } from 'react-icons/fa';
 
 /* Debug de montage */
@@ -54,11 +54,11 @@ if (typeof window !== 'undefined') {
 // ===== TYPES EXHAUSTIFS =====
 type ToastType = 'info' | 'success' | 'error' | 'warning';
 type ToastMsg = { id: number; text: string; type?: ToastType };
-type HistoryItem = { 
+type HistoryItem = {
   id: string;
-  q: string; 
-  a: string; 
-  doc?: string; 
+  q: string;
+  a: string;
+  doc?: string;
   timestamp: number;
   model: string;
   extractedText?: string;
@@ -72,8 +72,8 @@ type Theme = 'light' | 'dark';
 type OnlineStatus = boolean;
 
 // ===== CONFIGURATION COMPLÈTE =====
-const API_BASE: string = 
-  process.env.NEXT_PUBLIC_API_BASE || 
+const API_BASE: string =
+  process.env.NEXT_PUBLIC_API_BASE ||
   (typeof window !== 'undefined' && (window as any).API_BASE) ||
   'http://localhost:3001';
 
@@ -105,9 +105,7 @@ const MODEL_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
     { value: 'llama3', label: 'Llama 3' },
     { value: 'mistral', label: 'Mistral' },
   ],
-  gpt: [
-    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-  ],
+  gpt: [{ value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }],
 };
 
 const ROLES = [
@@ -119,11 +117,16 @@ const ROLES = [
 // ===== UTILITAIRES =====
 function toBackendModel(engine: string, model: string): string {
   switch (engine) {
-    case 'perplexity': return `perplexity:${model || 'sonar'}`;
-    case 'perplexica': return `perplexica:${model || 'default'}`;
-    case 'ollama': return `ollama:${model || 'llama3'}`;
-    case 'gpt': return `perplexity:${model || 'sonar'}`;
-    default: return 'general';
+    case 'perplexity':
+      return `perplexity:${model || 'sonar'}`;
+    case 'perplexica':
+      return `perplexica:${model || 'default'}`;
+    case 'ollama':
+      return `ollama:${model || 'llama3'}`;
+    case 'gpt':
+      return `perplexity:${model || 'sonar'}`;
+    default:
+      return 'general';
   }
 }
 
@@ -151,11 +154,18 @@ function generateId(): string {
 }
 
 // ===== CLIENT RÉSEAU SÉCURISÉ =====
-async function withTimeout(input: RequestInfo, init: RequestInit = {}, timeout = REQUEST_TIMEOUT_MS) {
+async function withTimeout(
+  input: RequestInfo,
+  init: RequestInit = {},
+  timeout = REQUEST_TIMEOUT_MS,
+) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const url = typeof input === 'string' && input.startsWith('/') ? `${API_BASE}${input}` : (input as string);
+    const url =
+      typeof input === 'string' && input.startsWith('/')
+        ? `${API_BASE}${input}`
+        : (input as string);
     return await fetch(url, { ...init, signal: ctrl.signal });
   } finally {
     clearTimeout(t);
@@ -165,12 +175,12 @@ async function withTimeout(input: RequestInfo, init: RequestInit = {}, timeout =
 async function fetchJson<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await withTimeout(path, init);
   const contentType = res.headers.get('content-type') || '';
-  
+
   if (!res.ok) {
     let msg = '';
     try {
-      msg = contentType.includes('application/json') 
-        ? JSON.stringify(await res.json()) 
+      msg = contentType.includes('application/json')
+        ? JSON.stringify(await res.json())
         : await res.text();
     } catch {
       msg = '';
@@ -246,18 +256,18 @@ const Library = {
 // ===== HOOKS UTILITAIRES =====
 function useOnlineStatus(): OnlineStatus {
   const [online, setOnline] = useState<OnlineStatus>(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
+    typeof navigator !== 'undefined' ? navigator.onLine : true,
   );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
     const handleOnline = () => setOnline(true);
     const handleOffline = () => setOnline(false);
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -269,15 +279,15 @@ function useOnlineStatus(): OnlineStatus {
 
 function useToasts() {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
-  
+
   const add = useCallback((text: string, type?: ToastType) => {
     const id = Date.now() + Math.random();
-    setToasts(t => [...t, { id, text, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3200);
+    setToasts((t) => [...t, { id, text, type }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
-  
-  const remove = useCallback((id: number) => setToasts(t => t.filter(x => x.id !== id)), []);
-  
+
+  const remove = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+
   return { toasts, add, remove };
 }
 
@@ -292,55 +302,68 @@ function useLocalStorage<T>(key: string, defaultValue: T): [T, (value: T) => voi
     }
   });
 
-  const setStoredValue = useCallback((newValue: T) => {
-    setValue(newValue);
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.setItem(key, JSON.stringify(newValue));
-      } catch (error) {
-        console.error('Erreur localStorage:', error);
+  const setStoredValue = useCallback(
+    (newValue: T) => {
+      setValue(newValue);
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(key, JSON.stringify(newValue));
+        } catch (error) {
+          console.error('Erreur localStorage:', error);
+        }
       }
-    }
-  }, [key]);
+    },
+    [key],
+  );
 
   return [value, setStoredValue];
 }
 
 // ===== COMPOSANTS UI =====
-const Spinner = () => (
-  <div className="spinner" />
-);
+const Spinner = () => <div className="spinner" />;
 
 const WindowControls = () => {
   const minimize = () => {
-    try { (window as any)?.electronAPI?.minimizeWindow?.(); } catch {}
+    try {
+      (window as any)?.electronAPI?.minimizeWindow?.();
+    } catch {}
   };
   const maximize = () => {
-    try { (window as any)?.electronAPI?.maximizeWindow?.(); } catch {}
+    try {
+      (window as any)?.electronAPI?.maximizeWindow?.();
+    } catch {}
   };
   const close = () => {
-    try { (window as any)?.electronAPI?.closeWindow?.(); } catch {}
+    try {
+      (window as any)?.electronAPI?.closeWindow?.();
+    } catch {}
   };
 
   if (typeof window === 'undefined') return null;
 
   return (
     <div className="win-controls">
-      <button onClick={minimize} title="Minimiser"><FaMinus /></button>
-      <button onClick={maximize} title="Maximiser"><FaWindowMaximize /></button>
-      <button onClick={close} title="Fermer"><FaTimes /></button>
+      <button onClick={minimize} title="Minimiser">
+        <FaMinus />
+      </button>
+      <button onClick={maximize} title="Maximiser">
+        <FaWindowMaximize />
+      </button>
+      <button onClick={close} title="Fermer">
+        <FaTimes />
+      </button>
     </div>
   );
 };
 
-function ThemisButton({ 
-  icon, 
-  label, 
-  onClick, 
+function ThemisButton({
+  icon,
+  label,
+  onClick,
   variant = 'default',
   disabled = false,
   loading = false,
-  className = ''
+  className = '',
 }: {
   icon?: React.ReactNode;
   label: string;
@@ -351,7 +374,7 @@ function ThemisButton({
   className?: string;
 }) {
   return (
-    <button 
+    <button
       className={`btn ${variant} ${className}`}
       onClick={onClick}
       disabled={disabled || loading}
@@ -362,7 +385,15 @@ function ThemisButton({
   );
 }
 
-function Toast({ message, type, onClose }: { message: string; type?: ToastType; onClose: () => void }) {
+function Toast({
+  message,
+  type,
+  onClose,
+}: {
+  message: string;
+  type?: ToastType;
+  onClose: () => void;
+}) {
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(onClose, 3000);
@@ -381,28 +412,30 @@ function Toast({ message, type, onClose }: { message: string; type?: ToastType; 
 function Toasts({ items, onClose }: { items: ToastMsg[]; onClose: (id: number) => void }) {
   return (
     <div className="toasts">
-      {items.map(t => (
+      {items.map((t) => (
         <Toast key={t.id} message={t.text} type={t.type} onClose={() => onClose(t.id)} />
       ))}
     </div>
   );
 }
 
-function Modal({ 
-  title, 
-  onClose, 
-  children 
-}: { 
-  title: string; 
-  onClose: () => void; 
-  children: React.ReactNode 
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
 }) {
   const titleId = useId();
 
   return (
-    <div 
-      className="overlay" 
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <div
+      className="overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div className="overlay-card" role="dialog" aria-labelledby={titleId}>
         <div className="overlay-header">
@@ -411,9 +444,7 @@ function Modal({
             <FaTimes />
           </button>
         </div>
-        <div className="overlay-body">
-          {children}
-        </div>
+        <div className="overlay-body">{children}</div>
       </div>
     </div>
   );
@@ -425,11 +456,11 @@ function mapBackendToLibRoot(be: BEStruct): LibRoot {
     name: profile.toUpperCase(),
     path: profile,
     children: Object.entries(cats || {}).map(([cat, files]) => ({
-      name: cat || "(racine)",
-      path: `${profile}/${cat || ""}`,
-      children: (files || []).map(f => ({
+      name: cat || '(racine)',
+      path: `${profile}/${cat || ''}`,
+      children: (files || []).map((f) => ({
         name: f.name,
-        path: `${profile}/${cat || ""}/${f.name}`,
+        path: `${profile}/${cat || ''}/${f.name}`,
         size: f.size,
       })),
     })),
@@ -439,9 +470,9 @@ function mapBackendToLibRoot(be: BEStruct): LibRoot {
 
 // ===== COMPOSANT ARBRE =====
 function TreeNode({
-  node, 
-  depth, 
-  onSelect, 
+  node,
+  depth,
+  onSelect,
   selectedPath,
 }: {
   node: any;
@@ -452,7 +483,7 @@ function TreeNode({
   const isDir = Array.isArray(node?.children);
   const path = node?.path || node?.name;
   const padding = 8 + depth * 14;
-  
+
   return (
     <>
       <div
@@ -464,15 +495,16 @@ function TreeNode({
         <span>{node?.name || node?.path}</span>
         {node?.size && <span className="file-size">({Math.round(node.size / 1024)}KB)</span>}
       </div>
-      {isDir && node.children?.map((ch: any, i: number) => (
-        <TreeNode
-          key={`${path || 'n'}-${i}`}
-          node={ch}
-          depth={depth + 1}
-          onSelect={onSelect}
-          selectedPath={selectedPath}
-        />
-      ))}
+      {isDir &&
+        node.children?.map((ch: any, i: number) => (
+          <TreeNode
+            key={`${path || 'n'}-${i}`}
+            node={ch}
+            depth={depth + 1}
+            onSelect={onSelect}
+            selectedPath={selectedPath}
+          />
+        ))}
     </>
   );
 }
@@ -510,40 +542,43 @@ function LibraryPanel({
     }
   }, [onToast, online]);
 
-  useEffect(() => { 
-    void refresh(); 
+  useEffect(() => {
+    void refresh();
   }, [refresh]);
 
-  const onUpload = useCallback(async (file?: File) => {
-    if (!file || !online) return;
-    
-    const validation = validateFile(file);
-    if (validation) {
-      onToast(validation, 'error');
-      return;
-    }
+  const onUpload = useCallback(
+    async (file?: File) => {
+      if (!file || !online) return;
 
-    setLoading(true);
-    try {
-      await Library.upload(file, role, subdir);
-      onToast('Upload réussi', 'success');
-      await refresh();
-    } catch (e: any) {
-      onToast(`Upload: ${e.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [role, subdir, refresh, onToast, online]);
+      const validation = validateFile(file);
+      if (validation) {
+        onToast(validation, 'error');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        await Library.upload(file, role, subdir);
+        onToast('Upload réussi', 'success');
+        await refresh();
+      } catch (e: any) {
+        onToast(`Upload: ${e.message}`, 'error');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [role, subdir, refresh, onToast, online],
+  );
 
   const onDelete = useCallback(async () => {
     if (!selectedPath || !online) return onToast('Aucun fichier sélectionné ou hors ligne', 'info');
-    
+
     setLoading(true);
     try {
-      await Library.remove({ 
-        filename: selectedPath.split('/').pop() || '', 
-        model: role, 
-        subdir: subdir || null 
+      await Library.remove({
+        filename: selectedPath.split('/').pop() || '',
+        model: role,
+        subdir: subdir || null,
       });
       onToast('Suppression réussie', 'success');
       setSelectedPath(undefined);
@@ -559,14 +594,14 @@ function LibraryPanel({
     if (!selectedPath || !renameTo.trim() || !online) {
       return onToast('Sélectionnez un fichier, un nouveau nom et vérifiez la connexion', 'info');
     }
-    
+
     setLoading(true);
     try {
-      await Library.rename({ 
-        oldName: selectedPath.split('/').pop() || '', 
-        newName: renameTo.trim(), 
-        model: role, 
-        subdir: subdir || null 
+      await Library.rename({
+        oldName: selectedPath.split('/').pop() || '',
+        newName: renameTo.trim(),
+        model: role,
+        subdir: subdir || null,
       });
       onToast('Renommage réussi', 'success');
       setRenameTo('');
@@ -581,14 +616,14 @@ function LibraryPanel({
 
   const onExtractFromFile = useCallback(async () => {
     if (!online) return onToast('Extraction impossible hors ligne', 'error');
-    
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.pdf,image/*';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      
+
       const validation = validateFile(file);
       if (validation) {
         onToast(validation, 'error');
@@ -618,26 +653,26 @@ function LibraryPanel({
   function renderRoot(root: LibRoot) {
     const dirs: any[] = Array.isArray((root as any).directories) ? (root as any).directories : [];
     const files: any[] = Array.isArray((root as any).files) ? (root as any).files : [];
-    const keys = Object.keys(root || {}).filter(k => !['directories','files'].includes(k));
-    
+    const keys = Object.keys(root || {}).filter((k) => !['directories', 'files'].includes(k));
+
     return (
       <>
         {dirs.map((d, i) => (
-          <TreeNode 
-            key={`dir-${i}`} 
-            node={d} 
-            depth={0} 
-            onSelect={handleSelect} 
-            selectedPath={selectedPath} 
+          <TreeNode
+            key={`dir-${i}`}
+            node={d}
+            depth={0}
+            onSelect={handleSelect}
+            selectedPath={selectedPath}
           />
         ))}
         {files.map((f, i) => (
-          <TreeNode 
-            key={`file-${i}`} 
-            node={f} 
-            depth={0} 
-            onSelect={handleSelect} 
-            selectedPath={selectedPath} 
+          <TreeNode
+            key={`file-${i}`}
+            node={f}
+            depth={0}
+            onSelect={handleSelect}
+            selectedPath={selectedPath}
           />
         ))}
         {keys.map((k, i) => {
@@ -648,12 +683,12 @@ function LibraryPanel({
               <div key={`arr-${k}-${i}`}>
                 <div className="tree-section-title">{k}</div>
                 {val.map((item: any, j: number) => (
-                  <TreeNode 
-                    key={`arr-${k}-${i}-${j}`} 
-                    node={item} 
-                    depth={1} 
-                    onSelect={handleSelect} 
-                    selectedPath={selectedPath} 
+                  <TreeNode
+                    key={`arr-${k}-${i}-${j}`}
+                    node={item}
+                    depth={1}
+                    onSelect={handleSelect}
+                    selectedPath={selectedPath}
                   />
                 ))}
               </div>
@@ -682,54 +717,56 @@ function LibraryPanel({
       </div>
 
       <div className="lib-actions">
-        <input 
-          type="file" 
+        <input
+          type="file"
           onChange={(e) => onUpload(e.target.files?.[0] || undefined)}
           disabled={!online || loading}
         />
-        <input 
-          placeholder="Sous-dossier (extraction)" 
-          value={subdir || ''} 
+        <input
+          placeholder="Sous-dossier (extraction)"
+          value={subdir || ''}
           onChange={(e) => setSubdir(e.target.value || undefined)}
         />
-        <ThemisButton 
-          icon={<FaTrashAlt />} 
-          label="Supprimer" 
+        <ThemisButton
+          icon={<FaTrashAlt />}
+          label="Supprimer"
           onClick={onDelete}
           variant="danger"
           disabled={!online || loading || !selectedPath}
         />
-        <input 
-          placeholder="Nouveau nom" 
-          value={renameTo} 
+        <input
+          placeholder="Nouveau nom"
+          value={renameTo}
           onChange={(e) => setRenameTo(e.target.value)}
         />
-        <ThemisButton 
-          icon={<FaEdit />} 
-          label="Renommer" 
+        <ThemisButton
+          icon={<FaEdit />}
+          label="Renommer"
           onClick={onRename}
           disabled={!online || loading || !selectedPath || !renameTo.trim()}
         />
-        <ThemisButton 
-          icon={<FaRegFilePdf />} 
-          label="Extraire fichier" 
+        <ThemisButton
+          icon={<FaRegFilePdf />}
+          label="Extraire fichier"
           onClick={onExtractFromFile}
           disabled={!online || loading}
         />
-        <ThemisButton 
-          icon={<FaSyncAlt />} 
-          label="Actualiser" 
+        <ThemisButton
+          icon={<FaSyncAlt />}
+          label="Actualiser"
           onClick={refresh}
           disabled={!online || loading}
         />
       </div>
 
       <div className="tree">
-        {structure ? renderRoot(structure) : (
-          loading ? 'Chargement...' : (
-            online ? 'Aucune donnée' : 'Hors ligne'
-          )
-        )}
+        {structure
+          ? renderRoot(structure)
+          : loading
+            ? 'Chargement...'
+            : online
+              ? 'Aucune donnée'
+              : 'Hors ligne'}
       </div>
 
       <div className="selection">
@@ -763,23 +800,19 @@ function ExtractionOverlay({
         <div className="overlay-body">
           <pre className="extracted-text">{text}</pre>
           <div className="row">
-            <ThemisButton 
-              icon={<FaPlay />} 
-              label="Envoyer à l'IA" 
+            <ThemisButton
+              icon={<FaPlay />}
+              label="Envoyer à l'IA"
               onClick={onSendToIA}
               variant="primary"
             />
-            <ThemisButton 
-              icon={<FaFileExport />} 
-              label="Envoyer pour Word" 
+            <ThemisButton
+              icon={<FaFileExport />}
+              label="Envoyer pour Word"
               onClick={onSendToWord}
               variant="success"
             />
-            <ThemisButton 
-              icon={<FaTimes />} 
-              label="Annuler" 
-              onClick={onCancel}
-            />
+            <ThemisButton icon={<FaTimes />} label="Annuler" onClick={onCancel} />
           </div>
         </div>
       </div>
@@ -831,14 +864,17 @@ function IAPanel({
     }
   }, []);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      if (online && !busy) {
-        onAsk();
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (online && !busy) {
+          onAsk();
+        }
       }
-    }
-  }, [onAsk, online, busy]);
+    },
+    [onAsk, online, busy],
+  );
 
   return (
     <section className="panel main-panel">
@@ -906,13 +942,11 @@ function IAPanel({
           {history.map((item) => (
             <div key={item.id} className="card history-item">
               <div className="history-meta">
-                <span className="timestamp">
-                  {new Date(item.timestamp).toLocaleString()}
-                </span>
+                <span className="timestamp">{new Date(item.timestamp).toLocaleString()}</span>
                 <span className="model">{item.model}</span>
               </div>
               <div className="q">
-                <span className="label">Q:</span> 
+                <span className="label">Q:</span>
                 <span className="content">{item.q}</span>
               </div>
               <div className="a">
@@ -991,11 +1025,7 @@ function ActionsPanel({
           onClick={onOpenExtract}
           disabled={!online}
         />
-        <ThemisButton
-          icon={<FaUpload />}
-          label="Import Q/R"
-          onClick={onOpenImport}
-        />
+        <ThemisButton icon={<FaUpload />} label="Import Q/R" onClick={onOpenImport} />
         <ThemisButton
           icon={<FaFileExport />}
           label="Exporter production"
@@ -1003,11 +1033,7 @@ function ActionsPanel({
           variant="success"
           disabled={!online}
         />
-        <ThemisButton
-          icon={<FaPrint />}
-          label="Imprimer"
-          onClick={onOpenPrint}
-        />
+        <ThemisButton icon={<FaPrint />} label="Imprimer" onClick={onOpenPrint} />
         <ThemisButton
           icon={<FaTrashAlt />}
           label="Vider historique"
@@ -1049,13 +1075,13 @@ export default function ThemisFinal() {
   // Actions IA
   const onAsk = useCallback(async () => {
     if (!online || !prompt.trim()) return;
-    
+
     setBusy(true);
     try {
       const { result } = await IA.ask({ prompt, model: backendModel });
       const text = result || '';
       setAnswer(text);
-      
+
       const historyItem: HistoryItem = {
         id: generateId(),
         q: prompt,
@@ -1063,8 +1089,8 @@ export default function ThemisFinal() {
         timestamp: Date.now(),
         model: backendModel,
       };
-      
-      setHistory(h => [historyItem, ...h]);
+
+      setHistory((h) => [historyItem, ...h]);
       add('Réponse IA reçue', 'success');
     } catch (e: any) {
       setAnswer(String(e));
@@ -1076,21 +1102,19 @@ export default function ThemisFinal() {
 
   const onExport = useCallback(async () => {
     if (!online || !answer.trim()) return;
-    
+
     setBusy(true);
     try {
-      const { filename } = await Docs.generate({ 
-        question: prompt, 
-        response: answer, 
-        model: role 
+      const { filename } = await Docs.generate({
+        question: prompt,
+        response: answer,
+        model: role,
       });
-      
-      const updatedHistory = history.map(item => 
-        item.q === prompt && item.a === answer && !item.doc
-          ? { ...item, doc: filename }
-          : item
+
+      const updatedHistory = history.map((item) =>
+        item.q === prompt && item.a === answer && !item.doc ? { ...item, doc: filename } : item,
       );
-      
+
       setHistory(updatedHistory);
       add('Document exporté', 'success');
     } catch (e: any) {
@@ -1100,10 +1124,13 @@ export default function ThemisFinal() {
     }
   }, [prompt, answer, role, add, online, history, setHistory]);
 
-  const onDownload = useCallback((filename: string) => {
-    const url = Docs.downloadUrl(filename, role);
-    window.open(url, '_blank');
-  }, [role]);
+  const onDownload = useCallback(
+    (filename: string) => {
+      const url = Docs.downloadUrl(filename, role);
+      window.open(url, '_blank');
+    },
+    [role],
+  );
 
   const onReplayHistory = useCallback((item: HistoryItem) => {
     setPrompt(item.q);
@@ -1113,14 +1140,14 @@ export default function ThemisFinal() {
   // Actions extraction
   const onOpenExtract = useCallback(() => {
     if (!online) return add('Extraction impossible hors ligne', 'error');
-    
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.pdf,image/*';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      
+
       const validation = validateFile(file);
       if (validation) {
         add(validation, 'error');
@@ -1150,15 +1177,15 @@ export default function ThemisFinal() {
 
   const onOverlaySendToWord = useCallback(async () => {
     if (!extractText.trim() || !online) return;
-    
+
     setBusy(true);
     try {
-      const { filename } = await Docs.generate({ 
-        question: '(texte extrait)', 
-        response: extractText, 
-        model: role 
+      const { filename } = await Docs.generate({
+        question: '(texte extrait)',
+        response: extractText,
+        model: role,
       });
-      
+
       const historyItem: HistoryItem = {
         id: generateId(),
         q: '(texte extrait)',
@@ -1168,8 +1195,8 @@ export default function ThemisFinal() {
         model: role,
         extractedText: extractText,
       };
-      
-      setHistory(h => [historyItem, ...h]);
+
+      setHistory((h) => [historyItem, ...h]);
       add('Document Word généré', 'success');
       setShowExtractOverlay(false);
     } catch (e: any) {
@@ -1193,21 +1220,24 @@ export default function ThemisFinal() {
   }, [setHistory, add]);
 
   // Fonction upload extraction vers prompt
-  const onUploadExtractToPrompt = useCallback((text: string) => {
-    setPrompt(prevPrompt => prevPrompt ? `${prevPrompt}\n\n${text}` : text);
-    add('Texte ajouté au prompt', 'info');
-  }, [add]);
+  const onUploadExtractToPrompt = useCallback(
+    (text: string) => {
+      setPrompt((prevPrompt) => (prevPrompt ? `${prevPrompt}\n\n${text}` : text));
+      add('Texte ajouté au prompt', 'info');
+    },
+    [add],
+  );
 
   // Toggle thème
   const toggleTheme = useCallback(() => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+    setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
   }, [setTheme]);
 
   // Styles injectés
   useEffect(() => {
     const id = 'themis-final-styles';
     if (document.getElementById(id)) return;
-    
+
     const style = document.createElement('style');
     style.id = id;
     style.textContent = `
@@ -1776,7 +1806,7 @@ export default function ThemisFinal() {
         }
       }
     `;
-    
+
     document.head.appendChild(style);
   }, [theme]);
 
@@ -1787,27 +1817,33 @@ export default function ThemisFinal() {
           Themis
           {!online && <FaBan className="offline-icon" title="Mode hors ligne" />}
         </div>
-        
+
         <div className="controls">
           <select value={engine} onChange={(e) => setEngine(e.target.value)}>
-            {ENGINES.map(eng => (
-              <option key={eng.value} value={eng.value}>{eng.label}</option>
+            {ENGINES.map((eng) => (
+              <option key={eng.value} value={eng.value}>
+                {eng.label}
+              </option>
             ))}
           </select>
-          
-          <select 
-            value={model} 
+
+          <select
+            value={model}
             onChange={(e) => setModel(e.target.value)}
             disabled={!MODEL_OPTIONS[engine]?.length}
           >
-            {(MODEL_OPTIONS[engine] || []).map(mod => (
-              <option key={mod.value} value={mod.value}>{mod.label}</option>
+            {(MODEL_OPTIONS[engine] || []).map((mod) => (
+              <option key={mod.value} value={mod.value}>
+                {mod.label}
+              </option>
             ))}
           </select>
-          
+
           <select value={role} onChange={(e) => setRole(e.target.value)}>
-            {ROLES.map(r => (
-              <option key={r.value} value={r.value}>{r.label}</option>
+            {ROLES.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
             ))}
           </select>
         </div>
@@ -1816,9 +1852,9 @@ export default function ThemisFinal() {
           {theme === 'dark' ? <FaSun /> : <FaMoon />}
         </button>
 
-        <button 
-          className="btn" 
-          onClick={() => setShowLibrary(v => !v)}
+        <button
+          className="btn"
+          onClick={() => setShowLibrary((v) => !v)}
           title={showLibrary ? 'Masquer la bibliothèque' : 'Afficher la bibliothèque'}
         >
           {showLibrary ? <FaEyeSlash /> : <FaEye />}
@@ -1876,7 +1912,9 @@ export default function ThemisFinal() {
       {/* Modales */}
       {showImport && (
         <Modal title="Import Q/R" onClose={() => setShowImport(false)}>
-          <p>Choisir un fichier JSON contenant des questions/réponses pour alimenter l'historique.</p>
+          <p>
+            Choisir un fichier JSON contenant des questions/réponses pour alimenter l'historique.
+          </p>
           <input
             type="file"
             accept=".json"
@@ -1889,16 +1927,16 @@ export default function ThemisFinal() {
                     const content = event.target?.result as string;
                     const data = JSON.parse(content);
                     if (Array.isArray(data)) {
-                      const importedHistory = data.map(item => ({
+                      const importedHistory = data.map((item) => ({
                         ...item,
                         id: item.id || generateId(),
                         timestamp: item.timestamp || Date.now(),
                       }));
-                      setHistory(prev => [...importedHistory, ...prev]);
+                      setHistory((prev) => [...importedHistory, ...prev]);
                       add(`${importedHistory.length} éléments importés`, 'success');
                     }
                   } catch (error) {
-                    add('Erreur lors de l\'import', 'error');
+                    add("Erreur lors de l'import", 'error');
                   }
                 };
                 reader.readAsText(file);
@@ -1929,11 +1967,7 @@ export default function ThemisFinal() {
               }}
               variant="success"
             />
-            <ThemisButton
-              icon={<FaTimes />}
-              label="Fermer"
-              onClick={() => setShowExport(false)}
-            />
+            <ThemisButton icon={<FaTimes />} label="Fermer" onClick={() => setShowExport(false)} />
           </div>
         </Modal>
       )}
@@ -1946,10 +1980,10 @@ export default function ThemisFinal() {
               icon={<FaPrint />}
               label="Imprimer historique"
               onClick={() => {
-                const printContent = history.map(item => 
-                  `Q: ${item.q}\nR: ${item.a}\n${'='.repeat(50)}\n`
-                ).join('\n');
-                
+                const printContent = history
+                  .map((item) => `Q: ${item.q}\nR: ${item.a}\n${'='.repeat(50)}\n`)
+                  .join('\n');
+
                 const printWindow = window.open('', '_blank');
                 if (printWindow) {
                   printWindow.document.write(`
@@ -1967,11 +2001,7 @@ export default function ThemisFinal() {
                 setShowPrint(false);
               }}
             />
-            <ThemisButton
-              icon={<FaTimes />}
-              label="Fermer"
-              onClick={() => setShowPrint(false)}
-            />
+            <ThemisButton icon={<FaTimes />} label="Fermer" onClick={() => setShowPrint(false)} />
           </div>
         </Modal>
       )}

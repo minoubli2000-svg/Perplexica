@@ -1,8 +1,7 @@
 import { Embeddings, type EmbeddingsParams } from '@langchain/core/embeddings';
 import { chunkArray } from '@langchain/core/utils/chunk_array';
 
-export interface HuggingFaceTransformersEmbeddingsParams
-  extends EmbeddingsParams {
+export interface HuggingFaceTransformersEmbeddingsParams extends EmbeddingsParams {
   modelName: string;
 
   model: string;
@@ -60,19 +59,14 @@ export class HuggingFaceTransformersEmbeddings
   }
 
   async embedQuery(text: string): Promise<number[]> {
-    const data = await this.runEmbedding([
-      this.stripNewLines ? text.replace(/\n/g, ' ') : text,
-    ]);
+    const data = await this.runEmbedding([this.stripNewLines ? text.replace(/\n/g, ' ') : text]);
     return data[0];
   }
 
   private async runEmbedding(texts: string[]) {
     const { pipeline } = await import('@xenova/transformers');
 
-    const pipe = await (this.pipelinePromise ??= pipeline(
-      'feature-extraction',
-      this.model,
-    ));
+    const pipe = await (this.pipelinePromise ??= pipeline('feature-extraction', this.model));
 
     return this.caller.call(async () => {
       const output = await pipe(texts, { pooling: 'mean', normalize: true });

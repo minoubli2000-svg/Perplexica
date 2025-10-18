@@ -1,56 +1,42 @@
-
 @echo off
-title Themis - Lancement Complet
-color 0A
+title Themis – Démarrage Complet
 cls
 
-echo.
-echo  ████████╗██╗  ██╗███████╗███╗   ███╗██╗███████╗
-echo  ╚══██╔══╝██║  ██║██╔════╝████╗ ████║██║██╔════╝
-echo     ██║   ███████║█████╗  ██╔████╔██║██║███████╗
-echo     ██║   ██╔══██║██╔══╝  ██║╚██╔╝██║██║╚════██║
-echo     ██║   ██║  ██║███████╗██║ ╚═╝ ██║██║███████║
-echo     ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝╚══════╝
-echo.
-echo  🏛️  Assistant IA pour la gestion documentaire
-echo  ==============================================
-
-rem Racine du projet
+REM Se placer à la racine du projet
 cd /d "C:\Users\inoub\Perplexica"
 
-echo 🐳 Démarrage services Docker...
-start /min docker-compose up -d
+REM 1. Démarrer l’interface Next.js (port 3000)
+echo ▶️  Démarrage Frontend Next.js...
+start "" /min cmd /c "npm run dev"
 
-echo ⏳ Initialisation Docker (15s)...
-timeout /t 15 /nobreak >nul
+REM 2. Démarrer le backend Flask (port 3001)
+echo ▶️  Démarrage Backend Flask...
+start "" /min cmd /c "cd /d C:\Users\inoub\Perplexica\backend && python app.py"
 
-echo 🐍 Démarrage Backend Flask (port 3001)...
-start /min cmd /c "title Themis Backend && python app.py"
+REM 3. Construire et lancer Perplexica via Docker Compose
+echo ▶️  Build et lancement Docker Compose...
+cd /d "C:\Users\inoub\Perplexica"
+docker-compose up -d --build
 
-echo ⏳ Initialisation Backend (10s)...
-timeout /t 10 /nobreak >nul
+REM 4. Attendre le démarrage des services Docker
+echo ⏳  Attente des services Docker (20s)...
+timeout /t 20 /nobreak >nul
 
-echo 🎨 Démarrage Interface React (port 3000)...
-start /min cmd /c "title Themis Frontend && npm run dev"
+REM 5. Lancer l’application Electron avec GPU désactivé
+echo ▶️  Lancement de l'application Electron...
+start "" /min cmd /c "cd /d C:\Users\inoub\Perplexica\Electron && npx electron . --disable-gpu --disable-gpu-compositing --ignore-gpu-blocklist --disable-software-rasterizer"
 
-echo ⏳ Initialisation Interface (15s)...
-timeout /t 15 /nobreak >nul
+echo ✅  Themis est opérationnel !
+exit /b 0
 
-rem Dossier Electron (adapter si différent)
-set "ELECTRON_DIR=C:\Users\inoub\Perplexica\electron"
 
-echo 🖥️ Lancement Application Electron (mode sans GPU)...
-start "" /min /d "%ELECTRON_DIR%" cmd /c "title Themis Electron && npx electron . --disable-gpu --disable-gpu-compositing --ignore-gpu-blocklist"
 
-echo.
-echo 🎉 THEMIS LANCE AVEC SUCCES !
-echo.
-echo 🌐 Services actifs:
-echo    • Interface: http://localhost:3000
-echo    • Backend:   http://localhost:3001
-echo    • Ollama:    http://localhost:11434
-echo    • SearxNG:   http://localhost:4000
-echo.
-echo ⚖️ Themis est opérationnel !
-timeout /t 10 /nobreak >nul
+
+
+
+
+
+
+
+
 

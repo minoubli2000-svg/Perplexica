@@ -2,8 +2,11 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhos
 
 async function safeFetch(res) {
   let payload;
-  try { payload = await res.json(); }
-  catch { payload = {}; }
+  try {
+    payload = await res.json();
+  } catch {
+    payload = {};
+  }
   if (!res.ok || payload.error) throw new Error(payload.error || 'Erreur API');
   return payload;
 }
@@ -11,8 +14,7 @@ async function safeFetch(res) {
 export const api = {
   // 1. Structure de la bibliothèque
   getLibraryStructure() {
-    return fetch(`${API_BASE}/api/library/structure`)
-      .then(safeFetch);
+    return fetch(`${API_BASE}/api/library/structure`).then(safeFetch);
   },
 
   // 2. Supprimer un document
@@ -20,7 +22,7 @@ export const api = {
     return fetch(`${API_BASE}/api/library/delete`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, model, subdir })
+      body: JSON.stringify({ filename, model, subdir }),
     }).then(safeFetch);
   },
 
@@ -29,7 +31,7 @@ export const api = {
     return fetch(`${API_BASE}/api/library/rename`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldName, newName, model, subdir })
+      body: JSON.stringify({ oldName, newName, model, subdir }),
     }).then(safeFetch);
   },
 
@@ -41,7 +43,7 @@ export const api = {
     form.append('category', category);
     return fetch(`${API_BASE}/api/upload`, {
       method: 'POST',
-      body: form
+      body: form,
     }).then(safeFetch);
   },
 
@@ -51,7 +53,7 @@ export const api = {
     form.append('file', file);
     return fetch(`${API_BASE}/api/documents/extract`, {
       method: 'POST',
-      body: form
+      body: form,
     }).then(safeFetch);
   },
 
@@ -60,14 +62,14 @@ export const api = {
     return fetch(`${API_BASE}/api/documents/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, response, model })
+      body: JSON.stringify({ question, response, model }),
     }).then(safeFetch);
   },
 
   // 7. Télécharger un document généré
   downloadDocument(filename, model = 'general') {
     const url = `${API_BASE}/api/documents/download?filename=${encodeURIComponent(filename)}&model=${model}`;
-    return fetch(url).then(res => {
+    return fetch(url).then((res) => {
       if (!res.ok) throw new Error('Erreur téléchargement');
       return res.blob();
     });
@@ -78,7 +80,7 @@ export const api = {
     return fetch(`${API_BASE}/api/ia`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, model })
+      body: JSON.stringify({ prompt, model }),
     }).then(safeFetch);
-  }
+  },
 };

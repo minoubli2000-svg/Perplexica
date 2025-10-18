@@ -11,10 +11,7 @@ export const getDocumentsFromLinks = async ({ links }: { links: string[] }) => {
 
   await Promise.all(
     links.map(async (link) => {
-      link =
-        link.startsWith('http://') || link.startsWith('https://')
-          ? link
-          : `https://${link}`;
+      link = link.startsWith('http://') || link.startsWith('https://') ? link : `https://${link}`;
 
       try {
         const res = await axios.get(link, {
@@ -62,9 +59,7 @@ export const getDocumentsFromLinks = async ({ links }: { links: string[] }) => {
           .trim();
 
         const splittedText = await splitter.splitText(parsedText);
-        const title = res.data
-          .toString('utf8')
-          .match(/<title.*>(.*?)<\/title>/)?.[1];
+        const title = res.data.toString('utf8').match(/<title.*>(.*?)<\/title>/)?.[1];
 
         const linkDocs = splittedText.map((text) => {
           return new Document({
@@ -78,10 +73,7 @@ export const getDocumentsFromLinks = async ({ links }: { links: string[] }) => {
 
         docs.push(...linkDocs);
       } catch (err) {
-        console.error(
-          'An error occurred while getting documents from links: ',
-          err,
-        );
+        console.error('An error occurred while getting documents from links: ', err);
         docs.push(
           new Document({
             pageContent: `Failed to retrieve content from the link: ${err}`,

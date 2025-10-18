@@ -1,7 +1,7 @@
 'use client';
 import dynamic from 'next/dynamic';
 
-const Themis = dynamic(() => import('../components/Themis.tsx'), { 
+const Themis = dynamic(() => import('../components/Themis.tsx'), {
   ssr: false,
   loading: () => (
     <div className="h-screen flex items-center justify-center bg-gray-900">
@@ -10,12 +10,9 @@ const Themis = dynamic(() => import('../components/Themis.tsx'), {
         <div className="text-xl">Chargement de Thémis...</div>
       </div>
     </div>
-  )
+  ),
 });
 
 export default function Home() {
   return <Themis />;
 }
-
-
-

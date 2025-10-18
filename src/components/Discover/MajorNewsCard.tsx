@@ -1,13 +1,7 @@
 import { Discover } from '@/app/discover/page';
 import Link from 'next/link';
 
-const MajorNewsCard = ({
-  item,
-  isLeft = true,
-}: {
-  item: Discover;
-  isLeft?: boolean;
-}) => (
+const MajorNewsCard = ({ item, isLeft = true }: { item: Discover; isLeft?: boolean }) => (
   <Link
     href={`/?q=Summary: ${item.url}`}
     className="w-full group flex flex-row items-stretch gap-6 h-60 py-3"

@@ -26,10 +26,7 @@ const ThinkBox = ({ content, thinkingEnded }: ThinkBoxProps) => {
         className="w-full flex items-center justify-between px-4 py-1 text-black/90 dark:text-white/90 hover:bg-light-200 dark:hover:bg-dark-200 transition duration-200"
       >
         <div className="flex items-center space-x-2">
-          <BrainCircuit
-            size={20}
-            className="text-[#9C27B0] dark:text-[#CE93D8]"
-          />
+          <BrainCircuit size={20} className="text-[#9C27B0] dark:text-[#CE93D8]" />
           <p className="font-medium text-sm">Thinking Process</p>
         </div>
         {isExpanded ? (

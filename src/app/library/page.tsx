@@ -67,9 +67,7 @@ const Page = () => {
       </div>
       {chats.length === 0 && (
         <div className="flex flex-row items-center justify-center min-h-screen">
-          <p className="text-black/70 dark:text-white/70 text-sm">
-            No chats found.
-          </p>
+          <p className="text-black/70 dark:text-white/70 text-sm">No chats found.</p>
         </div>
       )}
       {chats.length > 0 && (
@@ -78,9 +76,7 @@ const Page = () => {
             <div
               className={cn(
                 'flex flex-col space-y-4 py-6',
-                i !== chats.length - 1
-                  ? 'border-b border-white-200 dark:border-dark-200'
-                  : '',
+                i !== chats.length - 1 ? 'border-b border-white-200 dark:border-dark-200' : '',
               )}
               key={i}
             >
@@ -93,15 +89,9 @@ const Page = () => {
               <div className="flex flex-row items-center justify-between w-full">
                 <div className="flex flex-row items-center space-x-1 lg:space-x-1.5 text-black/70 dark:text-white/70">
                   <ClockIcon size={15} />
-                  <p className="text-xs">
-                    {formatTimeDifference(new Date(), chat.createdAt)} Ago
-                  </p>
+                  <p className="text-xs">{formatTimeDifference(new Date(), chat.createdAt)} Ago</p>
                 </div>
-                <DeleteChat
-                  chatId={chat.id}
-                  chats={chats}
-                  setChats={setChats}
-                />
+                <DeleteChat chatId={chat.id} chats={chats} setChats={setChats} />
               </div>
             </div>
           ))}

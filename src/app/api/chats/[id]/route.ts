@@ -2,10 +2,7 @@ import db from '@/lib/db';
 import { chats, messages } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
-export const GET = async (
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) => {
+export const GET = async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const { id } = await params;
 
@@ -30,17 +27,11 @@ export const GET = async (
     );
   } catch (err) {
     console.error('Error in getting chat by id: ', err);
-    return Response.json(
-      { message: 'An error has occurred.' },
-      { status: 500 },
-    );
+    return Response.json({ message: 'An error has occurred.' }, { status: 500 });
   }
 };
 
-export const DELETE = async (
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) => {
+export const DELETE = async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const { id } = await params;
 
@@ -55,15 +46,9 @@ export const DELETE = async (
     await db.delete(chats).where(eq(chats.id, id)).execute();
     await db.delete(messages).where(eq(messages.chatId, id)).execute();
 
-    return Response.json(
-      { message: 'Chat deleted successfully' },
-      { status: 200 },
-    );
+    return Response.json({ message: 'Chat deleted successfully' }, { status: 200 });
   } catch (err) {
     console.error('Error in deleting chat by id: ', err);
-    return Response.json(
-      { message: 'An error has occurred.' },
-      { status: 500 },
-    );
+    return Response.json({ message: 'An error has occurred.' }, { status: 500 });
   }
 };

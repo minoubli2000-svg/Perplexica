@@ -19,10 +19,7 @@ interface SearxngSearchResult {
   iframe_src?: string;
 }
 
-export const searchSearxng = async (
-  query: string,
-  opts?: SearxngSearchOptions,
-) => {
+export const searchSearxng = async (query: string, opts?: SearxngSearchOptions) => {
   const searxngURL = getSearxngApiEndpoint();
 
   const url = new URL(`${searxngURL}/search?format=json`);

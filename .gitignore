@@ -40,3 +40,7 @@ db.sqlite
 
 # Certificates
 certificates
+
+# Ignorer les fichiers d’environnement personnels
+file.env
+

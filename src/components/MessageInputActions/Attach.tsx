@@ -1,10 +1,5 @@
 import { cn } from '@/lib/utils';
-import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-  Transition,
-} from '@headlessui/react';
+import { Popover, PopoverButton, PopoverPanel, Transition } from '@headlessui/react';
 import { CopyPlus, File, LoaderCircle, Plus, Trash } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import { useChat } from '@/lib/hooks/useChat';
@@ -23,9 +18,7 @@ const Attach = ({ showText }: { showText?: boolean }) => {
       data.append('files', e.target.files![i]);
     }
 
-    const embeddingModelProvider = localStorage.getItem(
-      'embeddingModelProvider',
-    );
+    const embeddingModelProvider = localStorage.getItem('embeddingModelProvider');
     const embeddingModel = localStorage.getItem('embeddingModel');
 
     data.append('embedding_model_provider', embeddingModelProvider!);
@@ -46,9 +39,7 @@ const Attach = ({ showText }: { showText?: boolean }) => {
   return loading ? (
     <div className="flex flex-row items-center justify-between space-x-1">
       <LoaderCircle size={18} className="text-sky-400 animate-spin" />
-      <p className="text-sky-400 inline whitespace-nowrap text-xs font-medium">
-        Uploading..
-      </p>
+      <p className="text-sky-400 inline whitespace-nowrap text-xs font-medium">Uploading..</p>
     </div>
   ) : files.length > 0 ? (
     <Popover className="relative w-full max-w-[15rem] md:max-w-md lg:max-w-lg">
@@ -93,9 +84,7 @@ const Attach = ({ showText }: { showText?: boolean }) => {
         <PopoverPanel className="absolute z-10 w-64 md:w-[350px] right-0">
           <div className="bg-light-primary dark:bg-dark-primary border rounded-md border-light-200 dark:border-dark-200 w-full max-h-[200px] md:max-h-none overflow-y-auto flex flex-col">
             <div className="flex flex-row items-center justify-between px-3 py-2">
-              <h4 className="text-black dark:text-white font-medium text-sm">
-                Attached files
-              </h4>
+              <h4 className="text-black dark:text-white font-medium text-sm">Attached files</h4>
               <div className="flex flex-row items-center space-x-4">
                 <button
                   type="button"
@@ -133,10 +122,7 @@ const Attach = ({ showText }: { showText?: boolean }) => {
                   className="flex flex-row items-center justify-start w-full space-x-3 p-3"
                 >
                   <div className="bg-light-100 dark:bg-dark-100 flex items-center justify-center w-10 h-10 rounded-md">
-                    <File
-                      size={16}
-                      className="text-black/70 dark:text-white/70"
-                    />
+                    <File size={16} className="text-black/70 dark:text-white/70" />
                   </div>
                   <p className="text-black/70 dark:text-white/70 text-sm">
                     {file.fileName.length > 25

@@ -29,8 +29,7 @@ class LineListOutputParser extends BaseOutputParser<string[]> {
       return [];
     }
 
-    const questionsStartIndex =
-      startKeyIndex === -1 ? 0 : startKeyIndex + `<${this.key}>`.length;
+    const questionsStartIndex = startKeyIndex === -1 ? 0 : startKeyIndex + `<${this.key}>`.length;
     const questionsEndIndex = endKeyIndex === -1 ? text.length : endKeyIndex;
     const lines = text
       .slice(questionsStartIndex, questionsEndIndex)

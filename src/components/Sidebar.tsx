@@ -8,9 +8,7 @@ import React, { useState, type ReactNode } from 'react';
 import Layout from './Layout';
 
 const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
-  return (
-    <div className="flex flex-col items-center gap-y-3 w-full">{children}</div>
-  );
+  return <div className="flex flex-col items-center gap-y-3 w-full">{children}</div>;
 };
 
 const Sidebar = ({ children }: { children: React.ReactNode }) => {
@@ -51,9 +49,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                 href={link.href}
                 className={cn(
                   'relative flex flex-row items-center justify-center cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 duration-150 transition w-full py-2 rounded-lg',
-                  link.active
-                    ? 'text-black dark:text-white'
-                    : 'text-black/70 dark:text-white/70',
+                  link.active ? 'text-black dark:text-white' : 'text-black/70 dark:text-white/70',
                 )}
               >
                 <link.icon />
@@ -77,9 +73,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
             key={i}
             className={cn(
               'relative flex flex-col items-center space-y-1 text-center w-full',
-              link.active
-                ? 'text-black dark:text-white'
-                : 'text-black dark:text-white/70',
+              link.active ? 'text-black dark:text-white' : 'text-black dark:text-white/70',
             )}
           >
             {link.active && (

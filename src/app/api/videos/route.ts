@@ -37,13 +37,8 @@ export const POST = async (req: Request) => {
     const chatModelProviders = await getAvailableChatModelProviders();
 
     const chatModelProvider =
-      chatModelProviders[
-        body.chatModel?.provider || Object.keys(chatModelProviders)[0]
-      ];
-    const chatModel =
-      chatModelProvider[
-        body.chatModel?.model || Object.keys(chatModelProvider)[0]
-      ];
+      chatModelProviders[body.chatModel?.provider || Object.keys(chatModelProviders)[0]];
+    const chatModel = chatModelProvider[body.chatModel?.model || Object.keys(chatModelProvider)[0]];
 
     let llm: BaseChatModel | undefined;
 
@@ -75,9 +70,6 @@ export const POST = async (req: Request) => {
     return Response.json({ videos }, { status: 200 });
   } catch (err) {
     console.error(`An error occurred while searching videos: ${err}`);
-    return Response.json(
-      { message: 'An error occurred while searching videos' },
-      { status: 500 },
-    );
+    return Response.json({ message: 'An error occurred while searching videos' }, { status: 500 });
   }
 };

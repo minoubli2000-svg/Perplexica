@@ -33,14 +33,14 @@ export const GET = async (req: Request) => {
     config['embeddingModelProviders'] = {};
 
     for (const provider in chatModelProviders) {
-      config['chatModelProviders'][provider] = Object.keys(
-        chatModelProviders[provider],
-      ).map((model) => {
-        return {
-          name: model,
-          displayName: chatModelProviders[provider][model].displayName,
-        };
-      });
+      config['chatModelProviders'][provider] = Object.keys(chatModelProviders[provider]).map(
+        (model) => {
+          return {
+            name: model,
+            displayName: chatModelProviders[provider][model].displayName,
+          };
+        },
+      );
     }
 
     for (const provider in embeddingModelProviders) {
@@ -72,10 +72,7 @@ export const GET = async (req: Request) => {
     return Response.json({ ...config }, { status: 200 });
   } catch (err) {
     console.error('An error occurred while getting config:', err);
-    return Response.json(
-      { message: 'An error occurred while getting config' },
-      { status: 500 },
-    );
+    return Response.json({ message: 'An error occurred while getting config' }, { status: 500 });
   }
 };
 
@@ -127,9 +124,6 @@ export const POST = async (req: Request) => {
     return Response.json({ message: 'Config updated' }, { status: 200 });
   } catch (err) {
     console.error('An error occurred while updating config:', err);
-    return Response.json(
-      { message: 'An error occurred while updating config' },
-      { status: 500 },
-    );
+    return Response.json({ message: 'An error occurred while updating config' }, { status: 500 });
   }
 };

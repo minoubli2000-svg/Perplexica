@@ -3,12 +3,7 @@ import { Message } from './ChatWindow';
 import { useEffect, useState, Fragment } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
 import DeleteChat from './DeleteChat';
-import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-  Transition,
-} from '@headlessui/react';
+import { Popover, PopoverButton, PopoverPanel, Transition } from '@headlessui/react';
 import jsPDF from 'jspdf';
 import { useChat, Section } from '@/lib/hooks/useChat';
 
@@ -27,9 +22,7 @@ const downloadFile = (filename: string, content: string, type: string) => {
 };
 
 const exportAsMarkdown = (sections: Section[], title: string) => {
-  const date = new Date(
-    sections[0]?.userMessage?.createdAt || Date.now(),
-  ).toLocaleString();
+  const date = new Date(sections[0]?.userMessage?.createdAt || Date.now()).toLocaleString();
   let md = `# 💬 Chat Export: ${title}\n\n`;
   md += `*Exported on: ${date}*\n\n---\n`;
 
@@ -68,9 +61,7 @@ const exportAsMarkdown = (sections: Section[], title: string) => {
 
 const exportAsPDF = (sections: Section[], title: string) => {
   const doc = new jsPDF();
-  const date = new Date(
-    sections[0]?.userMessage?.createdAt || Date.now(),
-  ).toLocaleString();
+  const date = new Date(sections[0]?.userMessage?.createdAt || Date.now()).toLocaleString();
   let y = 15;
   const pageHeight = doc.internal.pageSize.height;
   doc.setFontSize(18);
@@ -96,11 +87,7 @@ const exportAsPDF = (sections: Section[], title: string) => {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(120);
-      doc.text(
-        `${new Date(section.userMessage.createdAt).toLocaleString()}`,
-        40,
-        y,
-      );
+      doc.text(`${new Date(section.userMessage.createdAt).toLocaleString()}`, 40, y);
       y += 6;
       doc.setTextColor(30);
       doc.setFontSize(12);
@@ -133,18 +120,11 @@ const exportAsPDF = (sections: Section[], title: string) => {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(120);
-      doc.text(
-        `${new Date(section.assistantMessage.createdAt).toLocaleString()}`,
-        40,
-        y,
-      );
+      doc.text(`${new Date(section.assistantMessage.createdAt).toLocaleString()}`, 40, y);
       y += 6;
       doc.setTextColor(30);
       doc.setFontSize(12);
-      const assistantLines = doc.splitTextToSize(
-        section.assistantMessage.content,
-        180,
-      );
+      const assistantLines = doc.splitTextToSize(section.assistantMessage.content, 180);
       for (let i = 0; i < assistantLines.length; i++) {
         if (y > pageHeight - 20) {
           doc.addPage();
@@ -204,10 +184,7 @@ const Navbar = () => {
           ? `${sections[0].userMessage.content.substring(0, 20).trim()}...`
           : sections[0].userMessage.content;
       setTitle(newTitle);
-      const newTimeAgo = formatTimeDifference(
-        new Date(),
-        sections[0].userMessage.createdAt,
-      );
+      const newTimeAgo = formatTimeDifference(new Date(), sections[0].userMessage.createdAt);
       setTimeAgo(newTimeAgo);
     }
   }, [sections]);
@@ -215,10 +192,7 @@ const Navbar = () => {
   useEffect(() => {
     const intervalId = setInterval(() => {
       if (sections.length > 0 && sections[0].userMessage) {
-        const newTimeAgo = formatTimeDifference(
-          new Date(),
-          sections[0].userMessage.createdAt,
-        );
+        const newTimeAgo = formatTimeDifference(new Date(), sections[0].userMessage.createdAt);
         setTimeAgo(newTimeAgo);
       }
     }, 1000);
@@ -278,12 +252,8 @@ const Navbar = () => {
                       >
                         <FileText size={16} className="text-[#24A0ED]" />
                         <div>
-                          <p className="text-sm font-medium text-black dark:text-white">
-                            Markdown
-                          </p>
-                          <p className="text-xs text-black/50 dark:text-white/50">
-                            .md format
-                          </p>
+                          <p className="text-sm font-medium text-black dark:text-white">Markdown</p>
+                          <p className="text-xs text-black/50 dark:text-white/50">.md format</p>
                         </div>
                       </button>
                       <button
@@ -292,9 +262,7 @@ const Navbar = () => {
                       >
                         <FileDown size={16} className="text-[#24A0ED]" />
                         <div>
-                          <p className="text-sm font-medium text-black dark:text-white">
-                            PDF
-                          </p>
+                          <p className="text-sm font-medium text-black dark:text-white">PDF</p>
                           <p className="text-xs text-black/50 dark:text-white/50">
                             Document format
                           </p>
@@ -305,12 +273,7 @@ const Navbar = () => {
                 </PopoverPanel>
               </Transition>
             </Popover>
-            <DeleteChat
-              redirect
-              chatId={chatId!}
-              chats={[]}
-              setChats={() => {}}
-            />
+            <DeleteChat redirect chatId={chatId!} chats={[]} setChats={() => {}} />
           </div>
         </div>
       </div>

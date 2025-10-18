@@ -106,8 +106,8 @@ export const loadOpenAIChatModels = async () => {
         'o3-mini',
         'o4-mini',
       ];
-      const isTemperatureRestricted = temperatureRestrictedModels.some(
-        (restrictedModel) => model.key.includes(restrictedModel),
+      const isTemperatureRestricted = temperatureRestrictedModels.some((restrictedModel) =>
+        model.key.includes(restrictedModel),
       );
 
       const modelConfig: any = {

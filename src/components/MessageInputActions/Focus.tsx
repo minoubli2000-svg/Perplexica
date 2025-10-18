@@ -1,18 +1,6 @@
-import {
-  BadgePercent,
-  ChevronDown,
-  Globe,
-  Pencil,
-  ScanEye,
-  SwatchBook,
-} from 'lucide-react';
+import { BadgePercent, ChevronDown, Globe, Pencil, ScanEye, SwatchBook } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-  Transition,
-} from '@headlessui/react';
+import { Popover, PopoverButton, PopoverPanel, Transition } from '@headlessui/react';
 import { SiReddit, SiYoutube } from '@icons-pack/react-simple-icons';
 import { Fragment } from 'react';
 import { useChat } from '@/lib/hooks/useChat';
@@ -105,17 +93,13 @@ const Focus = () => {
                 <div
                   className={cn(
                     'flex flex-row items-center space-x-1',
-                    focusMode === mode.key
-                      ? 'text-[#24A0ED]'
-                      : 'text-black dark:text-white',
+                    focusMode === mode.key ? 'text-[#24A0ED]' : 'text-black dark:text-white',
                   )}
                 >
                   {mode.icon}
                   <p className="text-sm font-medium">{mode.title}</p>
                 </div>
-                <p className="text-black/70 dark:text-white/70 text-xs">
-                  {mode.description}
-                </p>
+                <p className="text-black/70 dark:text-white/70 text-xs">{mode.description}</p>
               </PopoverButton>
             ))}
           </div>

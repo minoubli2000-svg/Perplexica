@@ -49,4 +49,3 @@ export async function deleteDocument(id) {
   if (!res.ok) throw new Error('Échec deleteDocument');
   return res.json();
 }
-

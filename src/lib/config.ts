@@ -73,8 +73,7 @@ const loadConfig = () => {
   return {} as Config;
 };
 
-export const getSimilarityMeasure = () =>
-  loadConfig().GENERAL.SIMILARITY_MEASURE;
+export const getSimilarityMeasure = () => loadConfig().GENERAL.SIMILARITY_MEASURE;
 
 export const getKeepAlive = () => loadConfig().GENERAL.KEEP_ALIVE;
 
@@ -97,20 +96,15 @@ export const getDeepseekApiKey = () => loadConfig().MODELS.DEEPSEEK.API_KEY;
 
 export const getAimlApiKey = () => loadConfig().MODELS.AIMLAPI.API_KEY;
 
-export const getCustomOpenaiApiKey = () =>
-  loadConfig().MODELS.CUSTOM_OPENAI.API_KEY;
+export const getCustomOpenaiApiKey = () => loadConfig().MODELS.CUSTOM_OPENAI.API_KEY;
 
-export const getCustomOpenaiApiUrl = () =>
-  loadConfig().MODELS.CUSTOM_OPENAI.API_URL;
+export const getCustomOpenaiApiUrl = () => loadConfig().MODELS.CUSTOM_OPENAI.API_URL;
 
-export const getCustomOpenaiModelName = () =>
-  loadConfig().MODELS.CUSTOM_OPENAI.MODEL_NAME;
+export const getCustomOpenaiModelName = () => loadConfig().MODELS.CUSTOM_OPENAI.MODEL_NAME;
 
-export const getLMStudioApiEndpoint = () =>
-  loadConfig().MODELS.LM_STUDIO.API_URL;
+export const getLMStudioApiEndpoint = () => loadConfig().MODELS.LM_STUDIO.API_URL;
 
-export const getLemonadeApiEndpoint = () =>
-  loadConfig().MODELS.LEMONADE.API_URL;
+export const getLemonadeApiEndpoint = () => loadConfig().MODELS.LEMONADE.API_URL;
 
 export const getLemonadeApiKey = () => loadConfig().MODELS.LEMONADE.API_KEY;
 

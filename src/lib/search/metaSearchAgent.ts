@@ -1,16 +1,8 @@
 import { ChatOpenAI } from '@langchain/openai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { Embeddings } from '@langchain/core/embeddings';
-import {
-  ChatPromptTemplate,
-  MessagesPlaceholder,
-  PromptTemplate,
-} from '@langchain/core/prompts';
-import {
-  RunnableLambda,
-  RunnableMap,
-  RunnableSequence,
-} from '@langchain/core/runnables';
+import { ChatPromptTemplate, MessagesPlaceholder, PromptTemplate } from '@langchain/core/prompts';
+import { RunnableLambda, RunnableMap, RunnableSequence } from '@langchain/core/runnables';
 import { BaseMessage, BaseMessageLike } from '@langchain/core/messages';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import LineListOutputParser from '../outputParsers/listLineOutputParser';
@@ -111,9 +103,7 @@ class MetaSearchAgent implements MetaSearchAgentType {
 
           linkDocs.map((doc) => {
             const URLDocExists = docGroups.find(
-              (d) =>
-                d.metadata.url === doc.metadata.url &&
-                d.metadata.totalDocs < 10,
+              (d) => d.metadata.url === doc.metadata.url && d.metadata.totalDocs < 10,
             );
 
             if (!URLDocExists) {
@@ -127,9 +117,7 @@ class MetaSearchAgent implements MetaSearchAgentType {
             }
 
             const docIndex = docGroups.findIndex(
-              (d) =>
-                d.metadata.url === doc.metadata.url &&
-                d.metadata.totalDocs < 10,
+              (d) => d.metadata.url === doc.metadata.url && d.metadata.totalDocs < 10,
             );
 
             if (docIndex !== -1) {
@@ -259,16 +247,13 @@ class MetaSearchAgent implements MetaSearchAgentType {
         chat_history: (input: BasicChainInput) => input.chat_history,
         date: () => new Date().toISOString(),
         context: RunnableLambda.from(async (input: BasicChainInput) => {
-          const processedHistory = formatChatHistoryAsString(
-            input.chat_history,
-          );
+          const processedHistory = formatChatHistoryAsString(input.chat_history);
 
           let docs: Document[] | null = null;
           let query = input.query;
 
           if (this.config.searchWeb) {
-            const searchRetrieverChain =
-              await this.createSearchRetrieverChain(llm);
+            const searchRetrieverChain = await this.createSearchRetrieverChain(llm);
 
             const searchRetrieverResult = await searchRetrieverChain.invoke({
               chat_history: processedHistory,
@@ -327,15 +312,13 @@ class MetaSearchAgent implements MetaSearchAgentType {
         const content = JSON.parse(fs.readFileSync(contentPath, 'utf8'));
         const embeddings = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
 
-        const fileSimilaritySearchObject = content.contents.map(
-          (c: string, i: number) => {
-            return {
-              fileName: content.title,
-              content: c,
-              embeddings: embeddings.embeddings[i],
-            };
-          },
-        );
+        const fileSimilaritySearchObject = content.contents.map((c: string, i: number) => {
+          return {
+            fileName: content.title,
+            content: c,
+            embeddings: embeddings.embeddings[i],
+          };
+        });
 
         return fileSimilaritySearchObject;
       })
@@ -345,15 +328,11 @@ class MetaSearchAgent implements MetaSearchAgentType {
       return docs.slice(0, 15);
     }
 
-    const docsWithContent = docs.filter(
-      (doc) => doc.pageContent && doc.pageContent.length > 0,
-    );
+    const docsWithContent = docs.filter((doc) => doc.pageContent && doc.pageContent.length > 0);
 
     if (optimizationMode === 'speed' || this.config.rerank === false) {
       if (filesData.length > 0) {
-        const [queryEmbedding] = await Promise.all([
-          embeddings.embedQuery(query),
-        ]);
+        const [queryEmbedding] = await Promise.all([embeddings.embedQuery(query)]);
 
         const fileDocs = filesData.map((fileData) => {
           return new Document({
@@ -375,28 +354,20 @@ class MetaSearchAgent implements MetaSearchAgentType {
         });
 
         let sortedDocs = similarity
-          .filter(
-            (sim) => sim.similarity > (this.config.rerankThreshold ?? 0.3),
-          )
+          .filter((sim) => sim.similarity > (this.config.rerankThreshold ?? 0.3))
           .sort((a, b) => b.similarity - a.similarity)
           .slice(0, 15)
           .map((sim) => fileDocs[sim.index]);
 
-        sortedDocs =
-          docsWithContent.length > 0 ? sortedDocs.slice(0, 8) : sortedDocs;
+        sortedDocs = docsWithContent.length > 0 ? sortedDocs.slice(0, 8) : sortedDocs;
 
-        return [
-          ...sortedDocs,
-          ...docsWithContent.slice(0, 15 - sortedDocs.length),
-        ];
+        return [...sortedDocs, ...docsWithContent.slice(0, 15 - sortedDocs.length)];
       } else {
         return docsWithContent.slice(0, 15);
       }
     } else if (optimizationMode === 'balanced') {
       const [docEmbeddings, queryEmbedding] = await Promise.all([
-        embeddings.embedDocuments(
-          docsWithContent.map((doc) => doc.pageContent),
-        ),
+        embeddings.embedDocuments(docsWithContent.map((doc) => doc.pageContent)),
         embeddings.embedQuery(query),
       ]);
 
@@ -437,41 +408,20 @@ class MetaSearchAgent implements MetaSearchAgentType {
 
   private processDocs(docs: Document[]) {
     return docs
-      .map(
-        (_, index) =>
-          `${index + 1}. ${docs[index].metadata.title} ${docs[index].pageContent}`,
-      )
+      .map((_, index) => `${index + 1}. ${docs[index].metadata.title} ${docs[index].pageContent}`)
       .join('\n');
   }
 
-  private async handleStream(
-    stream: AsyncGenerator<StreamEvent, any, any>,
-    emitter: eventEmitter,
-  ) {
+  private async handleStream(stream: AsyncGenerator<StreamEvent, any, any>, emitter: eventEmitter) {
     for await (const event of stream) {
-      if (
-        event.event === 'on_chain_end' &&
-        event.name === 'FinalSourceRetriever'
-      ) {
+      if (event.event === 'on_chain_end' && event.name === 'FinalSourceRetriever') {
         ``;
-        emitter.emit(
-          'data',
-          JSON.stringify({ type: 'sources', data: event.data.output }),
-        );
+        emitter.emit('data', JSON.stringify({ type: 'sources', data: event.data.output }));
       }
-      if (
-        event.event === 'on_chain_stream' &&
-        event.name === 'FinalResponseGenerator'
-      ) {
-        emitter.emit(
-          'data',
-          JSON.stringify({ type: 'response', data: event.data.chunk }),
-        );
+      if (event.event === 'on_chain_stream' && event.name === 'FinalResponseGenerator') {
+        emitter.emit('data', JSON.stringify({ type: 'response', data: event.data.chunk }));
       }
-      if (
-        event.event === 'on_chain_end' &&
-        event.name === 'FinalResponseGenerator'
-      ) {
+      if (event.event === 'on_chain_end' && event.name === 'FinalResponseGenerator') {
         emitter.emit('end');
       }
     }

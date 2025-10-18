@@ -98,11 +98,7 @@ const SearchImages = ({
                   <img
                     onClick={() => {
                       setOpen(true);
-                      setSlides([
-                        slides[i],
-                        ...slides.slice(0, i),
-                        ...slides.slice(i + 1),
-                      ]);
+                      setSlides([slides[i], ...slides.slice(0, i), ...slides.slice(i + 1)]);
                     }}
                     key={i}
                     src={image.img_src}
@@ -114,11 +110,7 @@ const SearchImages = ({
                   <img
                     onClick={() => {
                       setOpen(true);
-                      setSlides([
-                        slides[i],
-                        ...slides.slice(0, i),
-                        ...slides.slice(i + 1),
-                      ]);
+                      setSlides([slides[i], ...slides.slice(0, i), ...slides.slice(i + 1)]);
                     }}
                     key={i}
                     src={image.img_src}

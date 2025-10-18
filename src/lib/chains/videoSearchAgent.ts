@@ -1,8 +1,4 @@
-import {
-  RunnableSequence,
-  RunnableMap,
-  RunnableLambda,
-} from '@langchain/core/runnables';
+import { RunnableSequence, RunnableMap, RunnableLambda } from '@langchain/core/runnables';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import formatChatHistoryAsString from '../utils/formatHistory';
 import { BaseMessage } from '@langchain/core/messages';
@@ -43,25 +39,16 @@ const createVideoSearchChain = (llm: BaseChatModel) => {
     }),
     ChatPromptTemplate.fromMessages([
       ['system', videoSearchChainPrompt],
-      [
-        'user',
-        '<conversation>\n</conversation>\n<follow_up>\nHow does a car work?\n</follow_up>',
-      ],
+      ['user', '<conversation>\n</conversation>\n<follow_up>\nHow does a car work?\n</follow_up>'],
       ['assistant', '<query>How does a car work?</query>'],
       [
         'user',
         '<conversation>\n</conversation>\n<follow_up>\nWhat is the theory of relativity?\n</follow_up>',
       ],
       ['assistant', '<query>Theory of relativity</query>'],
-      [
-        'user',
-        '<conversation>\n</conversation>\n<follow_up>\nHow does an AC work?\n</follow_up>',
-      ],
+      ['user', '<conversation>\n</conversation>\n<follow_up>\nHow does an AC work?\n</follow_up>'],
       ['assistant', '<query>AC working</query>'],
-      [
-        'user',
-        '<conversation>{chat_history}</conversation>\n<follow_up>\n{query}\n</follow_up>',
-      ],
+      ['user', '<conversation>{chat_history}</conversation>\n<follow_up>\n{query}\n</follow_up>'],
     ]),
     llm,
     strParser,
@@ -79,12 +66,7 @@ const createVideoSearchChain = (llm: BaseChatModel) => {
       const videos: VideoSearchResult[] = [];
 
       res.results.forEach((result) => {
-        if (
-          result.thumbnail &&
-          result.url &&
-          result.title &&
-          result.iframe_src
-        ) {
+        if (result.thumbnail && result.url && result.title && result.iframe_src) {
           videos.push({
             img_src: result.thumbnail,
             url: result.url,
@@ -99,10 +81,7 @@ const createVideoSearchChain = (llm: BaseChatModel) => {
   ]);
 };
 
-const handleVideoSearch = (
-  input: VideoSearchChainInput,
-  llm: BaseChatModel,
-) => {
+const handleVideoSearch = (input: VideoSearchChainInput, llm: BaseChatModel) => {
   const videoSearchChain = createVideoSearchChain(llm);
   return videoSearchChain.invoke(input);
 };

@@ -1,8 +1,4 @@
-import {
-  RunnableSequence,
-  RunnableMap,
-  RunnableLambda,
-} from '@langchain/core/runnables';
+import { RunnableSequence, RunnableMap, RunnableLambda } from '@langchain/core/runnables';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import formatChatHistoryAsString from '../utils/formatHistory';
 import { BaseMessage } from '@langchain/core/messages';
@@ -42,10 +38,7 @@ const createImageSearchChain = (llm: BaseChatModel) => {
     }),
     ChatPromptTemplate.fromMessages([
       ['system', imageSearchChainPrompt],
-      [
-        'user',
-        '<conversation>\n</conversation>\n<follow_up>\nWhat is a cat?\n</follow_up>',
-      ],
+      ['user', '<conversation>\n</conversation>\n<follow_up>\nWhat is a cat?\n</follow_up>'],
       ['assistant', '<query>A cat</query>'],
 
       [
@@ -53,15 +46,9 @@ const createImageSearchChain = (llm: BaseChatModel) => {
         '<conversation>\n</conversation>\n<follow_up>\nWhat is a car? How does it work?\n</follow_up>',
       ],
       ['assistant', '<query>Car working</query>'],
-      [
-        'user',
-        '<conversation>\n</conversation>\n<follow_up>\nHow does an AC work?\n</follow_up>',
-      ],
+      ['user', '<conversation>\n</conversation>\n<follow_up>\nHow does an AC work?\n</follow_up>'],
       ['assistant', '<query>AC working</query>'],
-      [
-        'user',
-        '<conversation>{chat_history}</conversation>\n<follow_up>\n{query}\n</follow_up>',
-      ],
+      ['user', '<conversation>{chat_history}</conversation>\n<follow_up>\n{query}\n</follow_up>'],
     ]),
     llm,
     strParser,
@@ -94,10 +81,7 @@ const createImageSearchChain = (llm: BaseChatModel) => {
   ]);
 };
 
-const handleImageSearch = (
-  input: ImageSearchChainInput,
-  llm: BaseChatModel,
-) => {
+const handleImageSearch = (input: ImageSearchChainInput, llm: BaseChatModel) => {
   const imageSearchChain = createImageSearchChain(llm);
   return imageSearchChain.invoke(input);
 };

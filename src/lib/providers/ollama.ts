@@ -34,9 +34,7 @@ export const loadOllamaChatModels = async () => {
           model: model.model,
           temperature: 0.7,
           keepAlive: getKeepAlive(),
-          ...(ollamaApiKey
-            ? { headers: { Authorization: `Bearer ${ollamaApiKey}` } }
-            : {}),
+          ...(ollamaApiKey ? { headers: { Authorization: `Bearer ${ollamaApiKey}` } } : {}),
         }),
       };
     });
@@ -71,9 +69,7 @@ export const loadOllamaEmbeddingModels = async () => {
         model: new OllamaEmbeddings({
           baseUrl: ollamaApiEndpoint,
           model: model.model,
-          ...(ollamaApiKey
-            ? { headers: { Authorization: `Bearer ${ollamaApiKey}` } }
-            : {}),
+          ...(ollamaApiKey ? { headers: { Authorization: `Bearer ${ollamaApiKey}` } } : {}),
         }),
       };
     });

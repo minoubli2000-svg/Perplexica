@@ -56,19 +56,14 @@ const Chat = () => {
               dividerRef={isLast ? dividerRef : undefined}
               isLast={isLast}
             />
-            {!isLast && (
-              <div className="h-px w-full bg-light-secondary dark:bg-dark-secondary" />
-            )}
+            {!isLast && <div className="h-px w-full bg-light-secondary dark:bg-dark-secondary" />}
           </Fragment>
         );
       })}
       {loading && !messageAppeared && <MessageBoxLoading />}
       <div ref={messageEnd} className="h-0" />
       {dividerWidth > 0 && (
-        <div
-          className="bottom-24 lg:bottom-10 fixed z-40"
-          style={{ width: dividerWidth }}
-        >
+        <div className="bottom-24 lg:bottom-10 fixed z-40" style={{ width: dividerWidth }}>
           <MessageInput />
         </div>
       )}

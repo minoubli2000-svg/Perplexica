@@ -1,11 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
-import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-  TransitionChild,
-} from '@headlessui/react';
+import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
 import { Document } from '@langchain/core/documents';
 import { File } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -87,9 +81,7 @@ const MessageSources = ({ sources }: { sources: Document[] }) => {
               );
             })}
           </div>
-          <p className="text-xs text-black/50 dark:text-white/50">
-            View {sources.length - 3} more
-          </p>
+          <p className="text-xs text-black/50 dark:text-white/50">View {sources.length - 3} more</p>
         </button>
       )}
       <Transition appear show={isDialogOpen} as={Fragment}>
@@ -136,10 +128,7 @@ const MessageSources = ({ sources }: { sources: Document[] }) => {
                               />
                             )}
                             <p className="text-xs text-black/50 dark:text-white/50 overflow-hidden whitespace-nowrap text-ellipsis">
-                              {source.metadata.url.replace(
-                                /.+\/\/|www.|\..+/g,
-                                '',
-                              )}
+                              {source.metadata.url.replace(/.+\/\/|www.|\..+/g, '')}
                             </p>
                           </div>
                           <div className="flex flex-row items-center space-x-1 text-black/50 dark:text-white/50 text-xs">

@@ -36,11 +36,7 @@ export interface SuggestionMessage extends BaseMessage {
   suggestions: string[];
 }
 
-export type Message =
-  | AssistantMessage
-  | UserMessage
-  | SourceMessage
-  | SuggestionMessage;
+export type Message = AssistantMessage | UserMessage | SourceMessage | SuggestionMessage;
 export type ChatTurn = UserMessage | AssistantMessage;
 
 export interface File {

@@ -42,10 +42,7 @@ export const POST = async (req: Request) => {
     const body: ChatRequestBody = await req.json();
 
     if (!body.focusMode || !body.query) {
-      return Response.json(
-        { message: 'Missing focus mode or query' },
-        { status: 400 },
-      );
+      return Response.json({ message: 'Missing focus mode or query' }, { status: 400 });
     }
 
     body.history = body.history || [];
@@ -63,17 +60,13 @@ export const POST = async (req: Request) => {
       getAvailableEmbeddingModelProviders(),
     ]);
 
-    const chatModelProvider =
-      body.chatModel?.provider || Object.keys(chatModelProviders)[0];
-    const chatModel =
-      body.chatModel?.name ||
-      Object.keys(chatModelProviders[chatModelProvider])[0];
+    const chatModelProvider = body.chatModel?.provider || Object.keys(chatModelProviders)[0];
+    const chatModel = body.chatModel?.name || Object.keys(chatModelProviders[chatModelProvider])[0];
 
     const embeddingModelProvider =
       body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0];
     const embeddingModel =
-      body.embeddingModel?.name ||
-      Object.keys(embeddingModelProviders[embeddingModelProvider])[0];
+      body.embeddingModel?.name || Object.keys(embeddingModelProviders[embeddingModelProvider])[0];
 
     let llm: BaseChatModel | undefined;
     let embeddings: Embeddings | undefined;
@@ -84,32 +77,29 @@ export const POST = async (req: Request) => {
         apiKey: body.chatModel?.customOpenAIKey || getCustomOpenaiApiKey(),
         temperature: 0.7,
         configuration: {
-          baseURL:
-            body.chatModel?.customOpenAIBaseURL || getCustomOpenaiApiUrl(),
+          baseURL: body.chatModel?.customOpenAIBaseURL || getCustomOpenaiApiUrl(),
         },
       }) as unknown as BaseChatModel;
     } else if (
       chatModelProviders[chatModelProvider] &&
       chatModelProviders[chatModelProvider][chatModel]
     ) {
-      llm = chatModelProviders[chatModelProvider][chatModel]
-        .model as unknown as BaseChatModel | undefined;
+      llm = chatModelProviders[chatModelProvider][chatModel].model as unknown as
+        | BaseChatModel
+        | undefined;
     }
 
     if (
       embeddingModelProviders[embeddingModelProvider] &&
       embeddingModelProviders[embeddingModelProvider][embeddingModel]
     ) {
-      embeddings = embeddingModelProviders[embeddingModelProvider][
-        embeddingModel
-      ].model as Embeddings | undefined;
+      embeddings = embeddingModelProviders[embeddingModelProvider][embeddingModel].model as
+        | Embeddings
+        | undefined;
     }
 
     if (!llm || !embeddings) {
-      return Response.json(
-        { message: 'Invalid model selected' },
-        { status: 400 },
-      );
+      return Response.json({ message: 'Invalid model selected' }, { status: 400 });
     }
 
     const searchHandler: MetaSearchAgentType = searchHandlers[body.focusMode];
@@ -130,10 +120,7 @@ export const POST = async (req: Request) => {
 
     if (!body.stream) {
       return new Promise(
-        (
-          resolve: (value: Response) => void,
-          reject: (value: Response) => void,
-        ) => {
+        (resolve: (value: Response) => void, reject: (value: Response) => void) => {
           let message = '';
           let sources: any[] = [];
 
@@ -146,12 +133,7 @@ export const POST = async (req: Request) => {
                 sources = parsedData.data;
               }
             } catch (error) {
-              reject(
-                Response.json(
-                  { message: 'Error parsing data' },
-                  { status: 500 },
-                ),
-              );
+              reject(Response.json({ message: 'Error parsing data' }, { status: 500 }));
             }
           });
 
@@ -160,12 +142,7 @@ export const POST = async (req: Request) => {
           });
 
           emitter.on('error', (error: any) => {
-            reject(
-              Response.json(
-                { message: 'Search error', error },
-                { status: 500 },
-              ),
-            );
+            reject(Response.json({ message: 'Search error', error }, { status: 500 }));
           });
         },
       );
@@ -261,9 +238,6 @@ export const POST = async (req: Request) => {
     });
   } catch (err: any) {
     console.error(`Error in getting search results: ${err.message}`);
-    return Response.json(
-      { message: 'An error has occurred.' },
-      { status: 500 },
-    );
+    return Response.json({ message: 'An error has occurred.' }, { status: 500 });
   }
 };

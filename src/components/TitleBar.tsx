@@ -34,9 +34,9 @@ export default function TitleBar() {
         </div>
         <span className="brand no-drag">Thémis</span>
       </div>
-      
+
       <div className="spacer"></div>
-      
+
       <div className="controls no-drag">
         <button className="btn" onClick={handleMinimize}>
           <FaMinus />

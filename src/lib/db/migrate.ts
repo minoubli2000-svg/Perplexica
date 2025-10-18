@@ -17,9 +17,7 @@ db.exec(`
 function sanitizeSql(content: string) {
   return content
     .split(/\r?\n/)
-    .filter(
-      (l) => !l.trim().startsWith('-->') && !l.includes('statement-breakpoint'),
-    )
+    .filter((l) => !l.trim().startsWith('-->') && !l.includes('statement-breakpoint'))
     .join('\n');
 }
 
@@ -33,9 +31,7 @@ fs.readdirSync(migrationsFolder)
 
     const migrationName = file.split('_')[0] || file;
 
-    const already = db
-      .prepare('SELECT 1 FROM ran_migrations WHERE name = ?')
-      .get(migrationName);
+    const already = db.prepare('SELECT 1 FROM ran_migrations WHERE name = ?').get(migrationName);
     if (already) {
       console.log(`Skipping already-applied migration: ${file}`);
       return;
@@ -44,9 +40,7 @@ fs.readdirSync(migrationsFolder)
     try {
       if (migrationName === '0001') {
         const messages = db
-          .prepare(
-            'SELECT id, type, metadata, content, chatId, messageId FROM messages',
-          )
+          .prepare('SELECT id, type, metadata, content, chatId, messageId FROM messages')
           .all();
 
         db.exec(`
@@ -107,9 +101,7 @@ fs.readdirSync(migrationsFolder)
         db.exec(content);
       }
 
-      db.prepare('INSERT OR IGNORE INTO ran_migrations (name) VALUES (?)').run(
-        migrationName,
-      );
+      db.prepare('INSERT OR IGNORE INTO ran_migrations (name) VALUES (?)').run(migrationName);
       console.log(`Applied migration: ${file}`);
     } catch (err) {
       console.error(`Failed to apply migration ${file}:`, err);

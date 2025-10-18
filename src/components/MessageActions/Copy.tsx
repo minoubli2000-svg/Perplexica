@@ -3,13 +3,7 @@ import { Message } from '../ChatWindow';
 import { useState } from 'react';
 import { Section } from '@/lib/hooks/useChat';
 
-const Copy = ({
-  section,
-  initialMessage,
-}: {
-  section: Section;
-  initialMessage: string;
-}) => {
+const Copy = ({ section, initialMessage }: { section: Section; initialMessage: string }) => {
   const [copied, setCopied] = useState(false);
 
   return (

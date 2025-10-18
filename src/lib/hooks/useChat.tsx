@@ -8,14 +8,7 @@ import {
   SuggestionMessage,
   UserMessage,
 } from '@/components/ChatWindow';
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import crypto from 'crypto';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -51,11 +44,7 @@ type ChatContext = {
   setFocusMode: (mode: string) => void;
   setFiles: (files: File[]) => void;
   setFileIds: (fileIds: string[]) => void;
-  sendMessage: (
-    message: string,
-    messageId?: string,
-    rewrite?: boolean,
-  ) => Promise<void>;
+  sendMessage: (message: string, messageId?: string, rewrite?: boolean) => Promise<void>;
   rewrite: (messageId: string) => void;
 };
 
@@ -103,19 +92,11 @@ const checkConfig = async (
         'Content-Type': 'application/json',
       },
     }).then(async (res) => {
-      if (!res.ok)
-        throw new Error(
-          `Failed to fetch models: ${res.status} ${res.statusText}`,
-        );
+      if (!res.ok) throw new Error(`Failed to fetch models: ${res.status} ${res.statusText}`);
       return res.json();
     });
 
-    if (
-      !chatModel ||
-      !chatModelProvider ||
-      !embeddingModel ||
-      !embeddingModelProvider
-    ) {
+    if (!chatModel || !chatModelProvider || !embeddingModel || !embeddingModelProvider) {
       if (!chatModel || !chatModelProvider) {
         const chatModelProviders = providers.chatModelProviders;
         const chatModelProvidersKeys = Object.keys(chatModelProviders);
@@ -125,8 +106,7 @@ const checkConfig = async (
         } else {
           chatModelProvider =
             chatModelProvidersKeys.find(
-              (provider) =>
-                Object.keys(chatModelProviders[provider]).length > 0,
+              (provider) => Object.keys(chatModelProviders[provider]).length > 0,
             ) || chatModelProvidersKeys[0];
         }
 
@@ -146,16 +126,11 @@ const checkConfig = async (
       if (!embeddingModel || !embeddingModelProvider) {
         const embeddingModelProviders = providers.embeddingModelProviders;
 
-        if (
-          !embeddingModelProviders ||
-          Object.keys(embeddingModelProviders).length === 0
-        )
+        if (!embeddingModelProviders || Object.keys(embeddingModelProviders).length === 0)
           return toast.error('No embedding models available');
 
         embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
-        embeddingModel = Object.keys(
-          embeddingModelProviders[embeddingModelProvider],
-        )[0];
+        embeddingModel = Object.keys(embeddingModelProviders[embeddingModelProvider])[0];
       }
 
       localStorage.setItem('chatModel', chatModel!);
@@ -173,17 +148,13 @@ const checkConfig = async (
       ) {
         const chatModelProvidersKeys = Object.keys(chatModelProviders);
         chatModelProvider =
-          chatModelProvidersKeys.find(
-            (key) => Object.keys(chatModelProviders[key]).length > 0,
-          ) || chatModelProvidersKeys[0];
+          chatModelProvidersKeys.find((key) => Object.keys(chatModelProviders[key]).length > 0) ||
+          chatModelProvidersKeys[0];
 
         localStorage.setItem('chatModelProvider', chatModelProvider);
       }
 
-      if (
-        chatModelProvider &&
-        !chatModelProviders[chatModelProvider][chatModel]
-      ) {
+      if (chatModelProvider && !chatModelProviders[chatModelProvider][chatModel]) {
         if (
           chatModelProvider === 'custom_openai' &&
           Object.keys(chatModelProviders[chatModelProvider]).length === 0
@@ -217,9 +188,7 @@ const checkConfig = async (
         embeddingModelProvider &&
         !embeddingModelProviders[embeddingModelProvider][embeddingModel]
       ) {
-        embeddingModel = Object.keys(
-          embeddingModelProviders[embeddingModelProvider],
-        )[0];
+        embeddingModel = Object.keys(embeddingModelProviders[embeddingModelProvider])[0];
         localStorage.setItem('embeddingModel', embeddingModel);
       }
     }
@@ -325,13 +294,7 @@ export const chatContext = createContext<ChatContext>({
   setOptimizationMode: () => {},
 });
 
-export const ChatProvider = ({
-  children,
-  id,
-}: {
-  children: React.ReactNode;
-  id?: string;
-}) => {
+export const ChatProvider = ({ children, id }: { children: React.ReactNode; id?: string }) => {
   const searchParams = useSearchParams();
   const initialMessage = searchParams.get('q');
 
@@ -354,18 +317,15 @@ export const ChatProvider = ({
 
   const [notFound, setNotFound] = useState(false);
 
-  const [chatModelProvider, setChatModelProvider] = useState<ChatModelProvider>(
-    {
-      name: '',
-      provider: '',
-    },
-  );
+  const [chatModelProvider, setChatModelProvider] = useState<ChatModelProvider>({
+    name: '',
+    provider: '',
+  });
 
-  const [embeddingModelProvider, setEmbeddingModelProvider] =
-    useState<EmbeddingModelProvider>({
-      name: '',
-      provider: '',
-    });
+  const [embeddingModelProvider, setEmbeddingModelProvider] = useState<EmbeddingModelProvider>({
+    name: '',
+    provider: '',
+  });
 
   const [isConfigReady, setIsConfigReady] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -384,9 +344,7 @@ export const ChatProvider = ({
 
     messages.forEach((msg, i) => {
       if (msg.role === 'user') {
-        const nextUserMessageIndex = messages.findIndex(
-          (m, j) => j > i && m.role === 'user',
-        );
+        const nextUserMessageIndex = messages.findIndex((m, j) => j > i && m.role === 'user');
 
         const aiMessage = messages.find(
           (m, j) =>
@@ -412,10 +370,8 @@ export const ChatProvider = ({
           const regex = /\[(\d+)\]/g;
 
           if (processedMessage.includes('<think>')) {
-            const openThinkTag =
-              processedMessage.match(/<think>/g)?.length || 0;
-            const closeThinkTag =
-              processedMessage.match(/<\/think>/g)?.length || 0;
+            const openThinkTag = processedMessage.match(/<think>/g)?.length || 0;
+            const closeThinkTag = processedMessage.match(/<\/think>/g)?.length || 0;
 
             if (openThinkTag > closeThinkTag) {
               processedMessage += '</think> <a> </a>';
@@ -430,9 +386,7 @@ export const ChatProvider = ({
             processedMessage = processedMessage.replace(
               citationRegex,
               (_, capturedContent: string) => {
-                const numbers = capturedContent
-                  .split(',')
-                  .map((numStr) => numStr.trim());
+                const numbers = capturedContent.split(',').map((numStr) => numStr.trim());
 
                 const linksHtml = numbers
                   .map((numStr) => {
@@ -490,22 +444,12 @@ export const ChatProvider = ({
   }, [messages]);
 
   useEffect(() => {
-    checkConfig(
-      setChatModelProvider,
-      setEmbeddingModelProvider,
-      setIsConfigReady,
-      setHasError,
-    );
+    checkConfig(setChatModelProvider, setEmbeddingModelProvider, setIsConfigReady, setHasError);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (
-      chatId &&
-      !newChatCreated &&
-      !isMessagesLoaded &&
-      messages.length === 0
-    ) {
+    if (chatId && !newChatCreated && !isMessagesLoaded && messages.length === 0) {
       loadMessages(
         chatId,
         setMessages,
@@ -539,18 +483,14 @@ export const ChatProvider = ({
 
   const rewrite = (messageId: string) => {
     const index = messages.findIndex((msg) => msg.messageId === messageId);
-    const chatTurnsIndex = chatTurns.findIndex(
-      (msg) => msg.messageId === messageId,
-    );
+    const chatTurnsIndex = chatTurns.findIndex((msg) => msg.messageId === messageId);
 
     if (index === -1) return;
 
     const message = chatTurns[chatTurnsIndex - 1];
 
     setMessages((prev) => {
-      return [
-        ...prev.slice(0, messages.length > 2 ? messages.indexOf(message) : 0),
-      ];
+      return [...prev.slice(0, messages.length > 2 ? messages.indexOf(message) : 0)];
     });
     setChatHistory((prev) => {
       return [...prev.slice(0, chatTurns.length > 2 ? chatTurnsIndex - 1 : 0)];
@@ -570,11 +510,7 @@ export const ChatProvider = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfigReady, isReady, initialMessage]);
 
-  const sendMessage: ChatContext['sendMessage'] = async (
-    message,
-    messageId,
-    rewrite = false,
-  ) => {
+  const sendMessage: ChatContext['sendMessage'] = async (message, messageId, rewrite = false) => {
     if (loading) return;
     setLoading(true);
     setMessageAppeared(false);
@@ -639,10 +575,7 @@ export const ChatProvider = ({
 
         setMessages((prev) =>
           prev.map((message) => {
-            if (
-              message.messageId === data.messageId &&
-              message.role === 'assistant'
-            ) {
+            if (message.messageId === data.messageId && message.role === 'assistant') {
               return { ...message, content: message.content + data.data };
             }
 
@@ -669,15 +602,11 @@ export const ChatProvider = ({
         const autoVideoSearch = localStorage.getItem('autoVideoSearch');
 
         if (autoImageSearch === 'true') {
-          document
-            .getElementById(`search-images-${lastMsg.messageId}`)
-            ?.click();
+          document.getElementById(`search-images-${lastMsg.messageId}`)?.click();
         }
 
         if (autoVideoSearch === 'true') {
-          document
-            .getElementById(`search-videos-${lastMsg.messageId}`)
-            ?.click();
+          document.getElementById(`search-videos-${lastMsg.messageId}`)?.click();
         }
 
         /* Check if there are sources after message id's index and no suggestions */
@@ -694,11 +623,7 @@ export const ChatProvider = ({
           (msg, i) => i > userMessageIndex && msg.role === 'suggestion',
         );
 
-        if (
-          sourceMessage &&
-          sourceMessage.sources.length > 0 &&
-          suggestionMessageIndex == -1
-        ) {
+        if (sourceMessage && sourceMessage.sources.length > 0 && suggestionMessageIndex == -1) {
           const suggestions = await getSuggestions(messagesRef.current);
           setMessages((prev) => {
             return [

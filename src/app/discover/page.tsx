@@ -129,9 +129,7 @@ const Page = () => {
           <div className="flex flex-col gap-4 pb-28 pt-5 lg:pb-8 w-full">
             <div className="block lg:hidden">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {discover?.map((item, i) => (
-                  <SmallNewsCard key={`mobile-${i}`} item={item} />
-                ))}
+                {discover?.map((item, i) => <SmallNewsCard key={`mobile-${i}`} item={item} />)}
               </div>
             </div>
 
@@ -180,10 +178,7 @@ const Page = () => {
                           className="grid lg:grid-cols-3 sm:grid-cols-2 grid-cols-1 gap-4"
                         >
                           {smallCards.map((item, i) => (
-                            <SmallNewsCard
-                              key={`small-${index + i}`}
-                              item={item}
-                            />
+                            <SmallNewsCard key={`small-${index + i}`} item={item} />
                           ))}
                         </div>,
                       );
@@ -247,10 +242,7 @@ const Page = () => {
                           className="grid lg:grid-cols-3 sm:grid-cols-2 grid-cols-1 gap-4"
                         >
                           {smallCards.map((item, i) => (
-                            <SmallNewsCard
-                              key={`small-2-${index + i}`}
-                              item={item}
-                            />
+                            <SmallNewsCard key={`small-2-${index + i}`} item={item} />
                           ))}
                         </div>,
                       );

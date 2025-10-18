@@ -20,9 +20,7 @@ export const loadLemonadeChatModels = async () => {
     const res = await axios.get(`${lemonadeApiEndpoint}/api/v1/models`, {
       headers: {
         'Content-Type': 'application/json',
-        ...(lemonadeApiKey
-          ? { Authorization: `Bearer ${lemonadeApiKey}` }
-          : {}),
+        ...(lemonadeApiKey ? { Authorization: `Bearer ${lemonadeApiKey}` } : {}),
       },
     });
 
@@ -61,9 +59,7 @@ export const loadLemonadeEmbeddingModels = async () => {
     const res = await axios.get(`${lemonadeApiEndpoint}/api/v1/models`, {
       headers: {
         'Content-Type': 'application/json',
-        ...(lemonadeApiKey
-          ? { Authorization: `Bearer ${lemonadeApiKey}` }
-          : {}),
+        ...(lemonadeApiKey ? { Authorization: `Bearer ${lemonadeApiKey}` } : {}),
       },
     });
 

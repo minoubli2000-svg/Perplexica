@@ -11,10 +11,11 @@ services:
   perplexica:
     image: itzcrazykns1337/perplexica:main
     environment:
-      - SEARXNG_API_URL=http://searxng:8080
+      - SEARXNG_API_URL=http://searxng:4000
       - PERPLEXITY_API_KEY=
+      - NEXT_PUBLIC_API_URL=http://host.docker.internal:3001/api
     ports:
-      - "3002:3000"
+      - "3003:3000"
     networks:
       - themis-network
     depends_on:

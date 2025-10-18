@@ -1,0 +1,30 @@
+* [32m(HEAD detached at 03bbb5c)[m
+  backup-before-restore-03bbb5c[m
+  feature/library-panel[m
+  main[m
+  master[m
+  restore-22h[m
+  restore/themis[m
+  sauvegarde-post-restore[m
+  [31mremotes/origin/GCP[m
+  [31mremotes/origin/HEAD[m -> origin/master
+  [31mremotes/origin/admin-password[m
+  [31mremotes/origin/canary[m
+  [31mremotes/origin/develop/1.4.0[m
+  [31mremotes/origin/develop/function-calling[m
+  [31mremotes/origin/develop/v1.10.0[m
+  [31mremotes/origin/docker-test[m
+  [31mremotes/origin/feat/azure-provider[m
+  [31mremotes/origin/feat/deep-research[m
+  [31mremotes/origin/feat/deepseek-provider[m
+  [31mremotes/origin/feat/model-creation[m
+  [31mremotes/origin/feat/ollama-support[m
+  [31mremotes/origin/feat/remove-backend[m
+  [31mremotes/origin/feat/single-search[m
+  [31mremotes/origin/feat/structured-outputs[m
+  [31mremotes/origin/feat/system-instructions[m
+  [31mremotes/origin/feature/themis-full-rewrite[m
+  [31mremotes/origin/main[m
+  [31mremotes/origin/master[m
+  [31mremotes/origin/restore-22h[m
+  [31mremotes/origin/restore-22h45[m

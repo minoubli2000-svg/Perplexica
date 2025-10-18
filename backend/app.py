@@ -7,6 +7,8 @@ import sys
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+load_dotenv()  # lit automatiquement .env à la racine
+
 import fitz  # PyMuPDF (optionnel, pour compat scripts)
 
 # Détermine la racine projet (un niveau au-dessus de backend/)
@@ -169,7 +171,7 @@ def api_upload():
     # Extraction auto si demandée
     if do_extract:
         try:
-            extract_result = api_documents_extract_internal(filename=fname, file_path=fpath)
+            extract_result = _documents_extract_internal(filename=fname, file_path=fpath)
             result["extracted_text"] = extract_result.get("text", "")
         except Exception as e:
             result["extract_error"] = str(e)
@@ -229,16 +231,26 @@ def api_documents_extract():
     Extraction indépendante : upload + extract + return text.
     form-data: file (req)
     """
+    # 1) Récupère le fichier envoyé
     file = request.files.get("file")
     if not file or not file.filename:
         return jsonify({"error": "file manquant"}), 400
+
+    # 2) Sauvegarde temporaire
     tname = secure_filename(file.filename)
     tpath = os.path.join(INCOMING_PATH, tname)
-    file.save(tpath)  # Sauvegarde pour biblio
+    file.save(tpath)
+
+    # 3) Extraction via script interne
     result = api_documents_extract_internal(filename=tname, file_path=tpath)
+
+    # 4) Gestion des erreurs internes
     if "error" in result:
         return jsonify(result), 500
+
+    # 5) Renvoi du texte extrait
     return jsonify(result)
+
 
 # ------------------ DOCUMENTS (GENERATE / DOWNLOAD – INCHANGÉS) ------------------
 @app.post("/api/documents/generate")
@@ -334,6 +346,142 @@ def api_ia():
 
     else:
         return jsonify({"error": "Modèle non supporté (ollama:xxx ou perplexity)"}), 400
+    
+   # ============ ROUTES MANQUANTES POUR FRONTEND ============
+
+# 1. GET /api/documents - Liste tous les documents
+@app.get("/api/documents")
+def api_get_documents():
+    """Liste tous les documents de tous les profils."""
+    all_docs = []
+    for prof in PROFILES:
+        pdir = _profile_dir(prof)
+        for cat in CATEGORIES:
+            cdir = os.path.join(pdir, cat)
+            if os.path.isdir(cdir):
+                for fname in os.listdir(cdir):
+                    fpath = os.path.join(cdir, fname)
+                    if os.path.isfile(fpath):
+                        all_docs.append({
+                            "id": f"{prof}/{cat}/{fname}",
+                            "name": fname,
+                            "profile": prof,
+                            "category": cat,
+                            "size": os.path.getsize(fpath)
+                        })
+    return jsonify({"documents": all_docs})
+
+
+# 2. POST /api/ask - Alias pour /api/ia
+@app.post("/api/ask")
+def api_ask():
+    """Alias pour /api/ia pour compatibilité frontend."""
+    data = request.get_json(silent=True) or {}
+    question = data.get("question") or data.get("prompt")
+    document_id = data.get("documentId")  # Optionnel
+    
+    # Réutiliser /api/ia
+    if not question:
+        return jsonify({"error": "question requise"}), 400
+    
+    # Appeler la logique d'IA existante
+    data["prompt"] = question
+    request_data = data
+    return api_ia()
+
+
+# 3. GET /api/documents/{id}/extract - Extraction par ID document
+@app.get("/api/documents/<path:doc_id>/extract")
+def api_get_extracted(doc_id):
+    """Récupère le texte extrait d'un document déjà uploadé."""
+    # Format doc_id attendu: "general/extraction/test.pdf"
+    parts = doc_id.split("/")
+    if len(parts) < 3:
+        return jsonify({"error": "ID invalide (format: profile/category/filename)"}), 400
+    
+    prof, cat, fname = parts, parts, "/".join(parts[2:])
+    fpath = os.path.join(_profile_dir(prof), cat, fname)
+    
+    if not os.path.isfile(fpath):
+        return jsonify({"error": "Document introuvable"}), 404
+    
+    # Utiliser la fonction d'extraction existante
+    result = api_documents_extract_internal(filename=fname, file_path=fpath)
+    if "error" in result:
+        return jsonify(result), 500
+    
+    return result
+
+
+# 4. POST /api/export - Export conversation en PDF
+@app.post("/api/export")
+def api_export():
+    """Export conversation en PDF."""
+    data = request.get_json(silent=True) or {}
+    chat = data.get("chat", [])  # Liste de messages
+    document_id = data.get("documentId")
+    
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+        import io
+        
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        y = 800
+        
+        # Titre
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, y, "Export Conversation Themis")
+        y -= 40
+        
+        # Messages
+        c.setFont("Helvetica", 10)
+        for msg in chat:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")[:80]  # Limité à 80 chars
+            c.drawString(50, y, f"{role.upper()}: {content}")
+            y -= 20
+            if y < 50:
+                c.showPage()
+                y = 800
+        
+        c.save()
+        buffer.seek(0)
+        
+        return buffer.getvalue(), 200, {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": "attachment; filename=export.pdf"
+        }
+    
+    except ImportError:
+        return jsonify({
+            "error": "reportlab non installé. Exécute: pip install reportlab"
+        }), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 5. DELETE /api/documents/{id} - Suppression par ID
+@app.delete("/api/documents/<path:doc_id>")
+def api_delete_document(doc_id):
+    """Supprime un document par son ID (path complet)."""
+    parts = doc_id.split("/")
+    if len(parts) < 3:
+        return jsonify({"error": "ID invalide"}), 400
+    
+    prof, cat, fname = parts, parts, "/".join(parts[2:])
+    fpath = os.path.join(_profile_dir(prof), cat, fname)
+    
+    if not os.path.isfile(fpath):
+        return jsonify({"error": "Document introuvable"}), 404
+    
+    try:
+        os.remove(fpath)
+        return jsonify({"success": True, "deleted": doc_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+ 
 
 # ------------------ MAIN ------------------
 if __name__ == "__main__":

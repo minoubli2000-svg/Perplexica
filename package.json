@@ -7,9 +7,13 @@
     "dev": "next dev",
     "build": "npm run db:migrate && next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint:next": "next lint",
+    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\"",
+    "lint:fix": "eslint --fix \"src/**/*.{js,jsx,ts,tsx}\"",
     "format:write": "prettier . --write",
-    "db:migrate": "node ./src/lib/db/migrate.ts"
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "db:migrate": "node ./src/lib/db/migrate.ts",
+    "fix-all": "npm run lint:fix && npm run format"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
@@ -74,3 +78,5 @@
     "typescript": "^5"
   }
 }
+
+

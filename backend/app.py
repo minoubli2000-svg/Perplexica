@@ -7,6 +7,8 @@ import sys
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+load_dotenv()  # lit automatiquement .env à la racine
+
 import fitz  # PyMuPDF (optionnel, pour compat scripts)
 
 # Détermine la racine projet (un niveau au-dessus de backend/)
@@ -169,7 +171,7 @@ def api_upload():
     # Extraction auto si demandée
     if do_extract:
         try:
-            extract_result = api_documents_extract_internal(filename=fname, file_path=fpath)
+            extract_result = _documents_extract_internal(filename=fname, file_path=fpath)
             result["extracted_text"] = extract_result.get("text", "")
         except Exception as e:
             result["extract_error"] = str(e)
@@ -229,16 +231,26 @@ def api_documents_extract():
     Extraction indépendante : upload + extract + return text.
     form-data: file (req)
     """
+    # 1) Récupère le fichier envoyé
     file = request.files.get("file")
     if not file or not file.filename:
         return jsonify({"error": "file manquant"}), 400
+
+    # 2) Sauvegarde temporaire
     tname = secure_filename(file.filename)
     tpath = os.path.join(INCOMING_PATH, tname)
-    file.save(tpath)  # Sauvegarde pour biblio
+    file.save(tpath)
+
+    # 3) Extraction via script interne
     result = api_documents_extract_internal(filename=tname, file_path=tpath)
+
+    # 4) Gestion des erreurs internes
     if "error" in result:
         return jsonify(result), 500
+
+    # 5) Renvoi du texte extrait
     return jsonify(result)
+
 
 # ------------------ DOCUMENTS (GENERATE / DOWNLOAD – INCHANGÉS) ------------------
 @app.post("/api/documents/generate")

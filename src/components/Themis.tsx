@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  FaBalanceScale,FaExpand,FaCompress,FaBrain,FaFilePdf, FaSyncAlt, FaTimes, FaPrint, FaMinus, FaWindowMaximize, FaCopy, FaMoon, FaSun,
+  FaBalanceScale,FaExpand,FaFileWord,FaSync,FaCompress,FaBrain,FaFilePdf, FaSyncAlt, FaTimes, FaPrint, FaMinus, FaWindowMaximize, FaCopy, FaMoon, FaSun,
   FaRegFilePdf, FaFileExport, FaPlus, FaRegFolderOpen,FaFolderOpen, FaTrashAlt, FaWifi, FaBan, FaUpload,
   FaRobot, // Remplace FaBrain pour l'IA (icône robot)
   FaCog, // Pour config si besoin
@@ -1083,25 +1083,7 @@ const handleExportPDF = async () => {
 )}
 
 
-          {/* Historique */}
-          {history.length > 0 && (
-            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded mb-4 max-h-48 overflow-auto">
-              <h5 className="font-semibold mb-2">Historique :</h5>
-              {history.map((h, i) => (
-                <div
-                  key={i}
-                  className="mb-2 p-2 bg-white dark:bg-gray-700 rounded border"
-                >
-                  <div>
-                    <strong>Q :</strong> {h.question}
-                  </div>
-                  <div className="mt-1">
-                    <strong>R :</strong> {h.answer}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          
         </main>
 
         {showExtractModal && (
@@ -1227,59 +1209,132 @@ const handleExportPDF = async () => {
   </>
 )}
 
+       {/* Sidebar droite (flex-col : boutons haut fixed + historique bas scrollable) */}
+<aside className="w-64 bg-white/80 dark:bg-gray-800/80 p-4 border-l flex flex-col h-full min-h-screen">
+  {/* Boutons config haut (flex-shrink-0, space-y-3) */}
+  <div className="space-y-3 flex-shrink-0">
+    {/* Bouton Actualiser Tout (en haut, toujours actif, icon sync animé) */}
+    <ThemisButton
+      onClick={handleRefreshAll}
+      variant="outline"
+      icon={<FaSync className="rotate-0 group-hover:rotate-180 transition-transform" />}
+      size="sm"
+      className="w-full"
+    >
+      Actualiser Tout
+    </ThemisButton>
 
+    {/* Toggle Bibliothèque */}
+    <ThemisButton
+      onClick={() => setShowLibrary(!showLibrary)}
+      variant="dark"
+      icon={<FaRegFolderOpen />}
+      size="sm"
+      className="w-full"
+    >
+      {showLibrary ? 'Masquer Bibliothèque' : 'Afficher Bibliothèque'}
+    </ThemisButton>
 
-        {/* Sidebar droite */}
-        <aside className="w-64 bg-white/80 dark:bg-gray-800/80 p-4 space-y-3 border-l">
-          <ThemisButton
-            onClick={() => setShowLibrary(!showLibrary)}
-            variant="dark"
-            icon={<FaRegFolderOpen />}
-          >
-            {showLibrary ? 'Masquer Bibliothèque' : 'Afficher Bibliothèque'}
-          </ThemisButton>
-          <ThemisButton
-            onClick={() => setShowExtractModal(true)}
-            variant="outline"
-            icon={<FaRegFolderOpen />}
-          >
-            
+    {/* Extraire Texte (icon folder open, ou change FaFileText si préfères) */}
+    <ThemisButton
+      onClick={() => setShowExtractModal(true)}
+      variant="outline"
+      icon={<FaRegFolderOpen />}
+      size="sm"
+      className="w-full"
+    >
+      Extraire Texte
+    </ThemisButton>
 
-            Extraire Texte
-          </ThemisButton>
-          <ThemisButton
-            onClick={handleWordExport}
-            variant="success"
-            disabled={loadingExport || !question.trim() || !answer.trim()}
-            icon={<FaFileExport />}
-          >
-            Exporter Word
-          </ThemisButton>
-          <ThemisButton
-            onClick={handleCopyAnswer}
-            variant="primary"
-            disabled={!answer.trim()}
-            icon={<FaCopy />}
-          >
-            Copier
-          </ThemisButton>
-          <ThemisButton
-            onClick={() => setShowPrintModal(true)}
-            variant="dark"
-            disabled={!answer.trim()}
-            icon={<FaPrint />}
-          >
-            Imprimer
-          </ThemisButton>
-          <ThemisButton
-            onClick={() => setShowImportModal(true)}
-            variant="secondary"
-            icon={<FaUpload />}
-          >
-            Importer Q/R
-          </ThemisButton>
-        </aside>
+    {/* Exporter Word (disabled si pas Q/R, icon file-word) */}
+    <ThemisButton
+      onClick={handleWordExport}
+      variant="success"
+      disabled={loadingExport || !question.trim() || !answer.trim()}
+      icon={<FaFileWord />}
+      size="sm"
+      className="w-full"
+    >
+      Exporter Word
+    </ThemisButton>
+
+    {/* Copier Réponse (disabled si pas answer) */}
+    <ThemisButton
+      onClick={handleCopyAnswer}
+      variant="primary"
+      disabled={!answer.trim()}
+      icon={<FaCopy />}
+      size="sm"
+      className="w-full"
+    >
+      Copier Réponse
+    </ThemisButton>
+
+    {/* Imprimer (disabled si pas answer) */}
+    <ThemisButton
+      onClick={() => setShowPrintModal(true)}
+      variant="dark"
+      disabled={!answer.trim()}
+      icon={<FaPrint />}
+      size="sm"
+      className="w-full"
+    >
+      Imprimer
+    </ThemisButton>
+
+    {/* Importer Q/R */}
+    <ThemisButton
+      onClick={() => setShowImportModal(true)}
+      variant="secondary"
+      icon={<FaUpload />}
+      size="sm"
+      className="w-full"
+    >
+      Importer Q/R
+    </ThemisButton>
+  </div>
+
+  {/* Historique Q/R bas (flex-1, mt-4, scrollable 5 derniers, clickable) */}
+  <div className="flex-1 mt-4 overflow-hidden flex flex-col">
+    <h6 className="text-xs font-semibold text-gray-600 mb-2 sticky top-0 bg-white/80 dark:bg-gray-800/80 py-1 z-10">
+      Historique (5 derniers)
+    </h6>
+    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 pr-1">
+      {history.length > 0 ? (
+        <div className="space-y-1">
+          {history.slice(-5).reverse().map((h, i) => (  // Reverse pour plus récent en haut
+            <div
+              key={`hist-${i}-${h.question.substring(0, 20)}`}  // Unique key
+              className="p-2 bg-gray-100/50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600 text-xs cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              onClick={() => {
+                setQuestion(h.question);
+                setAnswer(h.answer);
+                setError('');  // Clear error
+                console.log(`Historique chargé #${history.length - i}: ${h.question.substring(0, 50)}...`);
+              }}
+              title={`Q: ${h.question}\nR: ${h.answer}`}  // Tooltip full
+            >
+              <div className="font-medium text-gray-800 dark:text-gray-200 truncate">
+                Q: {h.question.length > 35 ? `${h.question.substring(0, 35)}...` : h.question}
+              </div>
+              <div className="text-gray-600 dark:text-gray-300 text-[10px] truncate mt-0.5">
+                R: {h.answer.length > 50 ? `${h.answer.substring(0, 50)}...` : h.answer}
+              </div>
+              <div className="text-[8px] text-gray-400 mt-1">
+                {new Date(h.timestamp || Date.now()).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-xs italic">
+          Aucune question posée encore...
+        </div>
+      )}
+    </div>
+  </div>
+  </aside>
       </div>
     </>
   );
-}
+}    

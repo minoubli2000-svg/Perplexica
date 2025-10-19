@@ -1,30 +1,40 @@
-'use client';
-import React, { ReactNode, useRef } from 'react';
-import Draggable from 'react-draggable';
-
 interface DraggableModalProps {
   title: string;
-  children: ReactNode;
+  children: React.ReactNode;
   onClose: () => void;
+  headerControls?: React.ReactNode;
+  size?: 'full' | 'lg';
 }
+import React, { useRef } from 'react';
+import Draggable from 'react-draggable';
 
-export default function DraggableModal({ title, children, onClose }: DraggableModalProps) {
-  const nodeRef = useRef<HTMLDivElement>(null);
+export default function DraggableModal({
+  title,
+  children,
+  onClose,
+  headerControls,
+  size = 'lg'
+}: DraggableModalProps) {
+  const nodeRef = useRef(null);
+
+  const modalSize = size === 'full'
+    ? 'top-12 left-1/2 -translate-x-1/2 w-[96vw] max-w-none h-[90vh]'
+    : 'top-32 left-1/2 -translate-x-1/2 max-w-2xl w-full';
 
   return (
-    <Draggable handle=".modal-header" nodeRef={nodeRef}>
+    <Draggable nodeRef={nodeRef} handle=".modal-title">
       <div
         ref={nodeRef}
-        className="fixed bg-white dark:bg-gray-800 border border-gray-600 rounded shadow-lg w-96"
+        className={`fixed z-50 bg-white shadow-lg rounded-lg ${modalSize}`}
+        style={size === 'full' ? { height: '90vh' } : {}}
       >
-        <div className="modal-header flex justify-between items-center bg-gray-200 dark:bg-gray-700 p-2 cursor-move rounded-t">
-          <span className="font-semibold">{title}</span>
-          <button onClick={onClose} className="text-gray-700 dark:text-gray-300">
-            ✕
-          </button>
+        <div className="modal-title flex items-center justify-between p-4 border-b bg-gray-50 rounded-t-lg cursor-move">
+          <span className="font-bold">{title}</span>
+          {headerControls && <div className="flex space-x-2">{headerControls}</div>}
         </div>
         <div className="p-4">{children}</div>
       </div>
     </Draggable>
   );
 }
+

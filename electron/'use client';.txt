@@ -1,0 +1,124 @@
+'use client';
+
+import React, { ReactNode } from 'react';
+import { FaBalanceScale, FaMinus, FaWindowMaximize, FaTimes } from 'react-icons/fa';
+import './globals.css';
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="fr">
+      <body className="min-h-screen w-full overflow-hidden bg-[#191F38]">
+        <main className="bg-[#191F38] w-full h-full min-h-screen flex flex-col">
+          {/* Header principal : logo/titre gauche, boutons top-right corner */}
+          <div
+            className="relative flex items-start justify-between px-8 pt-4 pb-2 h-20"  // h-20 (80px total), pt-4 (moins bas), pb-2
+            style={{ 
+              background: 'transparent', 
+              WebkitAppRegion: 'drag'  // Drag sur tout header
+            }}
+          >
+            {/* Gauche : Logo + Titre (drag, align haut) */}
+            <div className="flex items-center gap-6" style={{ WebkitAppRegion: 'drag' }}>  {/* gap-6 pour espace */}
+              <FaBalanceScale
+                size={60}  // Réduit de 80 (moins massif)
+                style={{
+                  color: 'white',
+                  filter: 'drop-shadow(0 0 12px #C00) drop-shadow(0 0 2px #C00)',
+                }}
+              />
+              <span
+                className="font-bold text-6xl leading-tight"  // text-6xl (96px, grand mais fit h-20)
+                style={{
+                  color: 'white',
+                  textShadow: '6px 0 #c00, 0 6px #c00, -6px 0 #c00, 0 -6px #c00',
+                }}
+              >
+                Themis
+              </span>
+            </div>
+
+            {/* Boutons : absolute top-right corner (haut bord, no-drag, compact) */}
+            <div 
+              className="absolute top-0 right-0 flex items-start space-x-0 p-2 bg-[#191F38]/80 rounded-bl-md"  // top-0 right-0, space-x-0 (collés), p-2 marge, bg semi pour blend
+              style={{ 
+                WebkitAppRegion: 'no-drag', 
+                zIndex: 10  // Sur contenu
+              }}
+            >
+              {/* Minimize */}
+              <button
+                className="w-9 h-9 flex items-center justify-center rounded hover:bg-gray-600/50 transition-colors text-gray-300"  // w-9 h-9 (compact corner)
+                style={{ 
+                  WebkitAppRegion: 'no-drag', 
+                  pointerEvents: 'auto',
+                  cursor: 'pointer'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();  // No drag
+                  window.electronAPI?.minimizeWindow();
+                }}
+                title="Réduire"
+              >
+                <FaMinus size={16} />  // size=16 (fit petit bouton)
+              </button>
+
+              {/* Agrandir */}
+              <button
+                className="w-9 h-9 flex items-center justify-center rounded hover:bg-gray-600/50 transition-colors text-gray-300"
+                style={{ 
+                  WebkitAppRegion: 'no-drag', 
+                  pointerEvents: 'auto',
+                  cursor: 'pointer'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.electronAPI?.maximizeWindow();
+                }}
+                title="Agrandir"
+              >
+                <FaWindowMaximize size={16} />
+              </button>
+
+              {/* Fermer */}
+              <button
+                className="w-9 h-9 flex items-center justify-center rounded hover:bg-red-600 transition-colors text-gray-300"
+                style={{ 
+                  WebkitAppRegion: 'no-drag', 
+                  pointerEvents: 'auto',
+                  cursor: 'pointer'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.electronAPI?.closeWindow();
+                }}
+                title="Fermer"
+              >
+                <FaTimes size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Barre Themis (actions : Profil/Moteur/etc., center ou sous header) */}
+          <div 
+            className="flex items-center justify-center px-8 py-2 bg-[#191F38]/50"  // Center actions, py-2 compact
+            style={{ WebkitAppRegion: 'no-drag' }}
+          >
+            {/* Ici tes boutons/actions Themis (gap-4) */}
+            <div className="flex items-center gap-4">
+              {/* Exemples : Ajoute tes selects/switches */}
+              <select className="bg-red-600/30 text-white px-4 py-2 rounded border border-red-600" title="Profil">
+                <option>Profil 1</option>
+                <option>Profil 2</option>
+              </select>
+              <button className="bg-red-600/30 text-white px-4 py-2 rounded border border-red-600 hover:bg-red-600/50 transition">Ollama</button>
+              <button className="bg-red-600/30 text-white px-4 py-2 rounded border border-red-600 hover:bg-red-600/50">🌙 Thème</button>
+            </div>
+          </div>
+
+          {/* Contenu Themis (full sous header/toolbar, flex-1) */}
+          <div className="flex-1 overflow-auto px-8 pb-8">{children}</div>  // px-8 pb-8 pour margins, flex-1 full height
+        </main>
+      </body>
+    </html>
+  );
+}

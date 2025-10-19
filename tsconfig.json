@@ -13,14 +13,19 @@
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./src/*"] },
-    "target": "ES2017"
+    "paths": { "@/*": ["./src/*"] },  // Pour import '@/types/electron'
+    "target": "ES2017",
+    // Ajout pour types strict Electron (global augmentation .d.ts)
+    "noImplicitAny": true,  // Force types (évite any sur window.electronAPI)
+    "typeRoots": ["./node_modules/@types", "./src/types"]  // Charge src/types/electron.d.ts
   },
   "include": [
     "next-env.d.ts",
-    "**/*.{ts,tsx,js,jsx}",        // <- inclure .js et .jsx
+    "**/*.{ts,tsx,js,jsx}",
+    "**/*.d.ts",  // Ajout pour .d.ts (electron.d.ts, autres globals)
     ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }
+
 

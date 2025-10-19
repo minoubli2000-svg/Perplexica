@@ -1,133 +1,149 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
-app.disableHardwareAcceleration();
-app.commandLine.appendSwitch('disable-gpu');
-app.commandLine.appendSwitch('disable-gpu-compositing');
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog } = require("electron");
+const { spawn, exec } = require('child_process');
 const path = require("path");
-const http = require("node:http");
-const https = require("node:https");
 
 let mainWindow = null;
 
-function log(message, type = "INFO") {
-  const ts = new Date().toISOString();
-  console.log(`[${ts}] [${type}] ${message}`);
+function log(message) {
+  console.log(`[THEMIS] ${message}`);
 }
 
-function waitForUrl(targetUrl, timeoutMs = 30000, intervalMs = 500) {
-  return new Promise((resolve, reject) => {
-    try {
-      const u = new URL(targetUrl);
-      const client = u.protocol === "https:" ? https : http;
-      const start = Date.now();
-
-      const tick = () => {
-        const req = client.request(
-          { method: "GET", hostname: u.hostname, port: u.port, path: u.pathname || "/" },
-          (res) => {
-            if (res.statusCode && res.statusCode < 400) {
-              res.resume();
-              resolve();
-            } else {
-              res.resume();
-              if (Date.now() - start > timeoutMs) reject(new Error(`Timeout ${targetUrl} (${res.statusCode})`));
-              else setTimeout(tick, intervalMs);
-            }
-          }
-        );
-        req.on("error", () => {
-          if (Date.now() - start > timeoutMs) reject(new Error(`Timeout ${targetUrl}`));
-          else setTimeout(tick, intervalMs);
-        });
-        req.end();
-      };
-      tick();
-    } catch (e) {
-      reject(e);
-    }
+async function startServices() {
+  return new Promise((resolve) => {
+    log('🚀 Démarrage services Docker...');
+    exec('docker-compose down', { cwd: path.join(__dirname, '..') }, () => {  // Cwd racine projet (docker-compose.yml ?)
+      const process = spawn('docker-compose', ['up', '-d'], {
+        cwd: path.join(__dirname, '..'),  // Racine pour docker-compose
+        stdio: 'pipe',
+        shell: true
+      });
+      process.on('close', (code) => {
+        if (code === 0) log('✅ Services Docker démarrés');
+        setTimeout(resolve, 10000);
+      });
+    });
   });
 }
 
-function createWindow(startURL) {
+function createWindow() {
   log("Création de la fenêtre Themis...");
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1200,
     minHeight: 700,
-    frame: false,
+    frame: false,  // Frameless pour custom React
     titleBarStyle: "hidden",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#191F38",  // Match layout
     show: false,
     webPreferences: {
-      contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),  // Fix : siblings en electron/ (main.js et preload.js)
       webSecurity: true
     },
-    icon: path.join(__dirname, "assets", "themis-icon.png")
+    icon: path.join(__dirname, '..', 'assets', 'themis-icon.png'),  // Racine pour icon
+    title: "Themis"
   });
 
-  mainWindow.loadURL(startURL).catch((error) => {
-    log(`Erreur loadURL (${startURL}): ${error.message}`, "ERROR");
+  // LoadURL React dev (fallback 3001 si fail)
+  mainWindow.loadURL('http://localhost:3000').catch((err) => {
+    log(`Erreur load 3000: ${err.message}, fallback 3001`);
+    mainWindow.loadURL('http://localhost:3001');
   });
 
-  mainWindow.webContents.once("did-finish-load", () => {
-    log("Interface chargée, affichage de la fenêtre");
+  mainWindow.once('ready-to-show', () => {
+    log("Fenêtre prête, affichage");
     mainWindow.show();
   });
 
-  mainWindow.webContents.on("did-fail-load", (e, code, desc, url) => {
-    log(`did-fail-load code=${code} desc=${desc} url=${url}`, "ERROR");
-    mainWindow.show();
+  mainWindow.webContents.on('did-fail-load', (e, code, desc, url) => {
+    log(`did-fail-load: code=${code}, desc=${desc}, url=${url}`);
+    mainWindow.show();  // Montre même si fail
   });
 
+  mainWindow.on('closed', () => { mainWindow = null; });
+
+  // Events pour toggle icon layout (max/restore)
+  mainWindow.on('maximize', () => {
+    log('Maximize → send event renderer');
+    mainWindow.webContents.send('window-maximized');
+  });
+  mainWindow.on('unmaximize', () => {
+    log('Unmaximize → send event renderer');
+    mainWindow.webContents.send('window-unmaximized');
+  });
+
+  // External links (shell si pas local)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1")) {
-      return { action: "allow" };
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')) {
+      return { action: 'allow' };
     }
     shell.openExternal(url);
-    return { action: "deny" };
+    return { action: 'deny' };
   });
-
-  mainWindow.on("closed", () => { mainWindow = null; });
 }
 
-ipcMain.handle("window-minimize", () => { if (mainWindow) { mainWindow.minimize(); return true; } return false; });
-ipcMain.handle("window-maximize", () => {
-  if (mainWindow) { if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize(); return true; }
+// IPC Handlers boutons (retourne boolean pour Promise types layout.d.ts)
+ipcMain.handle('minimize-window', () => {
+  log('IPC minimize');
+  if (mainWindow) {
+    mainWindow.minimize();
+    return true;
+  }
   return false;
 });
-ipcMain.handle("window-close", () => { if (mainWindow) { mainWindow.close(); return true; } return false; });
 
-ipcMain.handle("get-version", () => app.getVersion());
-ipcMain.handle("get-platform", () => process.platform);
+ipcMain.handle('maximize-window', () => {
+  log('IPC maximize');
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('close-window', () => {
+  log('IPC close');
+  if (mainWindow) {
+    mainWindow.close();
+    return true;
+  }
+  return false;
+});
+
+// Bonus (pour types)
+ipcMain.handle('get-version', () => app.getVersion());
+ipcMain.handle('get-platform', () => process.platform);
+ipcMain.handle('select-file', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'] });
+  return result.canceled ? null : result.filePaths[0];
+});
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
-  const startURL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
-  try { await waitForUrl(startURL); } catch (e) { log(`Front pas prêt: ${e.message}`, "WARN"); }
-  createWindow(startURL);
+  await startServices();  // Docker
+  setTimeout(createWindow, 5000);  // Wait services
+  log('🏛️ THEMIS démarré (electron/main.js)');
 });
 
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    const startURL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
-    createWindow(startURL);
-  }
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+app.on('window-all-closed', () => {
+  exec('docker-compose down', { cwd: path.join(__dirname, '..') });  // Stop Docker racine
+  if (process.platform !== 'darwin') app.quit();
 });
 
-ipcMain.removeHandler('window-minimize');
-ipcMain.handle('window-minimize', () => { if (mainWindow) mainWindow.minimize(); return true; });
-ipcMain.removeHandler('window-maximize');
-ipcMain.handle('window-maximize', () => { if (!mainWindow) return false; if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize(); return true; });
-ipcMain.removeHandler('window-close');
-ipcMain.handle('window-close', () => { if (mainWindow) mainWindow.close(); return true; });
+
+
 
 

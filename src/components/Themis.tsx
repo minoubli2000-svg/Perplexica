@@ -954,31 +954,46 @@ const handleExportPDF = async () => {
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold mr-2">Mode :</label>
-              <ThemisButton
-                size="xs"
-                variant={onlineMode === 'en_ligne' ? 'success' : 'outline'}
-                onClick={() => setOnlineMode('en_ligne')}
-                icon={<FaWifi />}
-              >
-                En ligne
-              </ThemisButton>
-              <ThemisButton
-                size="xs"
-                variant={onlineMode === 'hors_ligne' ? 'success' : 'outline'}
-                onClick={() => setOnlineMode('hors_ligne')}
-                icon={<FaBan />}
-              >
-                Hors ligne
-              </ThemisButton>
-            </div>
-            <div>
-              <label className="text-xs font-semibold mr-2">Moteur :</label>
-              <select
-                value={engine}
-                onChange={e => handleEngineChange(e.target.value)}
-                className="border px-2 py-1"
-              >
+  <label className="text-xs font-semibold mr-2 block mb-2">Mode Connexion :</label>
+  <button
+    onClick={() => setOnlineMode(onlineMode === 'en_ligne' ? 'hors_ligne' : 'en_ligne')}
+    className={`relative w-full max-w-xs h-10 rounded-full transition-all duration-300 ease-in-out flex items-center px-2 focus:outline-none focus:ring-2 focus:ring-offset-2 shadow-lg ${
+      onlineMode === 'en_ligne'
+        ? 'bg-green-500 focus:ring-green-500'  // Vert pour en ligne
+        : 'bg-red-500 focus:ring-red-500'      // Rouge pour hors ligne
+    }`}
+    title={`Passer en mode ${onlineMode === 'en_ligne' ? 'Hors ligne' : 'En ligne'}`}
+  >
+    {/* Cercle indicateur qui glisse */}
+    <div
+      className={`absolute h-8 w-8 rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center text-white text-xs font-bold ${
+        onlineMode === 'en_ligne'
+          ? 'bg-white translate-x-1 shadow-green-200'  // À droite pour en ligne
+          : 'bg-white -translate-x-1 shadow-red-200'   // À gauche pour hors ligne
+      }`}
+    >
+      {onlineMode === 'en_ligne' ? <FaWifi className="text-green-600" /> : <FaBan className="text-red-600" />}
+    </div>
+    {/* Texte fade selon état */}
+    <span className={`absolute inset-0 flex items-center justify-center text-white font-semibold transition-opacity duration-300 text-xs ${
+      onlineMode === 'en_ligne' ? 'opacity-100' : 'opacity-0'
+    }`}>
+      En ligne
+    </span>
+    <span className={`absolute inset-0 flex items-center justify-center text-white font-semibold transition-opacity duration-300 text-xs ${
+      onlineMode === 'hors_ligne' ? 'opacity-100' : 'opacity-0'
+    }`}>
+      Hors ligne
+    </span>
+  </button>
+</div>
+<div>
+  <label className="text-xs font-semibold mr-2">Moteur :</label>
+  <select
+    value={engine}
+    onChange={e => handleEngineChange(e.target.value)}
+    className="border px-2 py-1"
+  >
                 {ENGINES
                   .filter(e =>
                     onlineMode === 'en_ligne'
@@ -1051,21 +1066,22 @@ const handleExportPDF = async () => {
             </div>
           )}
 
-          {/* Réponse */}
-          {answer && (
-            <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/30 border-l-4 border-green-500 relative">
-              <h5 className="font-semibold mb-2">Réponse :</h5>
-              <pre className="whitespace-pre-wrap text-sm">{answer}</pre>
-              <ThemisButton
-                onClick={handleCopyAnswer}
-                size="sm"
-                variant="outline"
-                className="absolute top-2 right-2"
-              >
-                Copier
-              </ThemisButton>
-            </div>
-          )}
+          {/* Réponse (fond neutre, sans vert) */}
+{answer && (
+  <div className="mb-4 p-4 bg-transparent border-0 relative">  {/* Neutre : transparent, pas de border */}
+    <h5 className="font-semibold mb-2 text-white">Réponse :</h5>  {/* Text white pour dark */}
+    <pre className="whitespace-pre-wrap text-sm text-gray-200">{answer}</pre>  {/* Gris clair pour lisibilité */}
+    <ThemisButton
+      onClick={handleCopyAnswer}
+      size="sm"
+      variant="outline"
+      className="absolute top-2 right-2"
+    >
+      Copier  {/* Ajoute label si pas (ex. icon + texte) */}
+    </ThemisButton>
+  </div>
+)}
+
 
           {/* Historique */}
           {history.length > 0 && (
@@ -1267,4 +1283,3 @@ const handleExportPDF = async () => {
     </>
   );
 }
-

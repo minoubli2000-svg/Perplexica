@@ -1,34 +1,33 @@
-// src/components/WindowControls.tsx
 'use client';
 
 import React from 'react';
 import { FaMinus, FaWindowMaximize, FaTimes } from 'react-icons/fa';
 
 export default function WindowControls() {
-  // Envoi d’événements à l’API Electron pour contrôler la fenêtre
-  const send = (channel: 'minimize' | 'maximize' | 'close') => {
-    window.api?.send('window-control', channel);
-  };
+  // Contrôle direct via l'API Electron exposée dans preload.js
+  const minimize = () => window.electronAPI?.minimizeWindow?.();
+  const maximize = () => window.electronAPI?.maximizeWindow?.();
+  const close = () => window.electronAPI?.closeWindow?.();
 
   return (
     <div className="flex space-x-2">
       <button
         aria-label="Minimize"
-        onClick={() => send('minimize')}
+        onClick={minimize}
         className="p-1 hover:bg-gray-200 rounded"
       >
         <FaMinus />
       </button>
       <button
         aria-label="Maximize"
-        onClick={() => send('maximize')}
+        onClick={maximize}
         className="p-1 hover:bg-gray-200 rounded"
       >
         <FaWindowMaximize />
       </button>
       <button
         aria-label="Close"
-        onClick={() => send('close')}
+        onClick={close}
         className="p-1 hover:bg-gray-200 rounded"
       >
         <FaTimes />
@@ -36,3 +35,4 @@ export default function WindowControls() {
     </div>
   );
 }
+

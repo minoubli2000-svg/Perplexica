@@ -642,12 +642,25 @@ const handleCopyToLibrary = () => {
 const handlePrintAnswer = () => {
   if (!answer) return;
   const printWin = window.open('', '_blank');
+  if (!printWin) {
+    setError('Impression bloquée (autorise les popups ?)');
+    return;
+  }
   printWin.document.write(`
-    <html><head><title>Réponse Themis</title></head><body><pre>${answer}</pre></body></html>
+    <html>
+      <head><title>Réponse Themis</title></head>
+      <body>
+        <pre>${answer}</pre>
+        <button onclick="window.print()">Imprimer cette réponse</button>
+      </body>
+    </html>
   `);
   printWin.document.close();
-  printWin.print();
+  // NE METS PAS `printWin.print();`
 };
+
+
+
 
   // État pour modals
 const [showExtractModal, setShowExtractModal] = useState(false);
@@ -806,31 +819,16 @@ const handleWordExport = async () => {
 const [isFullscreen, setIsFullscreen] = useState(false);
    
 
-// Handler injecter à l'IA (unique, injecte extractedText dans question)
-const handleInjectToIA = () => {
-  if (extractedText) {
-    setQuestion(extractedText);  // Injecte dans champ question pour IA
-    setShowExtractModal(false);
-    setExtractedText('');
-    setError('');  // Reset
-  } else {
-    setError('Aucun texte extrait à injecter.');
-  }
-};
-
-// Handler impression (unique, Q/R complète avec print natif)
 const handlePrint = () => {
   if (!question.trim() || !answer.trim()) {
     setError('Question ou réponse vide pour impression.');
     return;
   }
-  
   const printWin = window.open('', '_blank');
   if (!printWin) {
     setError('Impression bloquée (autorise les popups ?)');
     return;
   }
-  
   printWin.document.write(`
     <html>
       <head>
@@ -843,15 +841,17 @@ const handlePrint = () => {
         <pre>${question}</pre>
         <h2>Réponse:</h2>
         <pre>${answer}</pre>
+        <button onclick="window.print()">Imprimer cette réponse</button>
       </body>
     </html>
   `);
   printWin.document.close();
-  printWin.print();
-  printWin.close();  // Ferme après impression
+
+  // printWin.close();    <-- peut être gardé si tu veux fermer après impression, à mettre après printWin.print()
   setShowPrintModal(false);
-  setToast?.({ message: 'Impression lancée !', type: 'success' });
+  setToast?.({ message: 'Aperçu impression ouvert !', type: 'success' });
 };
+
 
 // Handler export PDF (unique, HTML fallback pour PDF-like)
 const handleExportPDF = async () => {

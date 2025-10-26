@@ -2,6 +2,8 @@
 import React, { ReactNode, useState, useEffect } from 'react';
 import { FaBalanceScale, FaMinus, FaWindowMaximize, FaWindowRestore, FaTimes } from 'react-icons/fa';
 import './globals.css';
+/// <reference path="../../types/electron.d.ts" />
+
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const [isMaximized, setIsMaximized] = useState(false);

@@ -489,8 +489,14 @@ export default function Themis() {
     gpt: MODEL_OPTIONS.gpt[0].value,
   });
 
-  const [messages, setMessages] = useState([]); // Tableau historique
-  const [question, setQuestion] = useState('');
+  
+const [messages, setMessages] = useState(() => {
+  const saved = localStorage.getItem('themis_chat');
+  return saved ? JSON.parse(saved) : [];
+});
+
+const [question, setQuestion] = useState('');
+
 
   const [extractedText, setExtractedText] = useState('');
   const [history, setHistory] = useState([]);
@@ -595,31 +601,23 @@ export default function Themis() {
   setStage('Interrogation IA en cours...');
   setError('');
 
-  // Ajoute la question dans le chat (et stocke la version courante pour l'historique !)
-  let localMessages;
-  setMessages(msgs => {
-    localMessages = [...msgs, { role: 'user', text: question }];
-    return localMessages;
-  });
+  const currentMessages = [...messages, { role: 'user', text: question }];
+  setMessages(currentMessages);
   setQuestion('');
 
   try {
-    const res = await askIA(question, model);
+    const prompt = currentMessages.map(m => `${m.role}: ${m.text}`).join('\n');
+    const res = await askIA(prompt, model);
     if (!res.result) throw new Error('Aucune réponse reçue');
 
-    setMessages(msgs => {
-      const newMsgs = [...msgs, { role: 'assistant', text: res.result }];
-      // C'est ICI qu'on ajoute à l'historique !
-      setHistory(prev => [
-        {
-          question,
-          messages: newMsgs,
-          model
-        },
-        ...prev
-      ].slice(0, 15));
-      return newMsgs;
-    });
+    const newMessages = [...currentMessages, { role: 'assistant', text: res.result }];
+    setMessages(newMessages);
+
+    setHistory(prev => [
+      { question, messages: newMessages, model },
+      ...prev
+    ].slice(0, 15));
+
     setStage('Réponse reçue');
     showToast('Réponse IA reçue');
   } catch (err) {
@@ -628,6 +626,8 @@ export default function Themis() {
     showToast(`Erreur IA: ${err.message}`, 'error');
   }
 };
+
+
 
 
 

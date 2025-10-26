@@ -96,17 +96,21 @@ const askIA = async (prompt, model) => {
   return j;
 };
 
-const generateDoc = async (question, answer, model) => {
-  const res = await fetch(`${API_BASE}/api/documents/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, response: answer, model }),
-  });
-  let j; try { j = await res.json(); } catch { j = {}; }
-  if (!res.ok || !j.success) throw new Error(j.error || 'Erreur export');
-  if (!j.filename) throw new Error('Nom de fichier manquant');
-  return j;
+
+
+
+const generateDoc = async (question, responseString, model) => {
+  const res = await fetch(`${API_BASE}/api/documents/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, response: responseString, model }),
+  });
+  let j; try { j = await res.json(); } catch { j = {}; }
+  if (!res.ok || !j.success) throw new Error(j.error || 'Erreur export');
+  if (!j.filename) throw new Error('Nom de fichier manquant');
+  return j;
 };
+
 
 
 
@@ -485,12 +489,13 @@ export default function Themis() {
     gpt: MODEL_OPTIONS.gpt[0].value,
   });
 
+  const [messages, setMessages] = useState([]); // Tableau historique
   const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
+
   const [extractedText, setExtractedText] = useState('');
   const [history, setHistory] = useState([]);
 
-  
+ 
  
  
  const handleExtract = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -576,34 +581,89 @@ export default function Themis() {
 
   const showToast = (message, type = 'success') => setToast({ message, type });
 
-  const handleClear = () => { setQuestion(''); setAnswer(''); setExtractedText(''); setStage(''); setError(''); };
+  const handleClear = () => {
+  setQuestion('');
+  setMessages([]); // ← ici ! toujours tableau vide pour clear le chat
+  setExtractedText('');
+  setStage('');
+  setError('');
+};
+
 
   const handleAskAI = async () => {
-    if (!question.trim()) return;
-    setStage('Interrogation IA en cours...');
-    setError(''); setAnswer('');
-    try {
-      const res = await askIA(question, model);
-      if (!res.result) throw new Error('Aucune réponse reçue');
-      setAnswer(res.result);
-      setStage('Réponse reçue');
-      setHistory(prev => [{ question, answer: res.result, model }, ...prev].slice(0, 15));
-      showToast('Réponse IA reçue');
-    } catch (err) {
-      setError(`Erreur IA: ${err.message}`);
-      setStage('');
-      showToast(`Erreur IA: ${err.message}`, 'error');
-    }
-  };
+  if (!question.trim()) return;
+  setStage('Interrogation IA en cours...');
+  setError('');
+
+  // Ajoute la question dans le chat (et stocke la version courante pour l'historique !)
+  let localMessages;
+  setMessages(msgs => {
+    localMessages = [...msgs, { role: 'user', text: question }];
+    return localMessages;
+  });
+  setQuestion('');
+
+  try {
+    const res = await askIA(question, model);
+    if (!res.result) throw new Error('Aucune réponse reçue');
+
+    setMessages(msgs => {
+      const newMsgs = [...msgs, { role: 'assistant', text: res.result }];
+      // C'est ICI qu'on ajoute à l'historique !
+      setHistory(prev => [
+        {
+          question,
+          messages: newMsgs,
+          model
+        },
+        ...prev
+      ].slice(0, 15));
+      return newMsgs;
+    });
+    setStage('Réponse reçue');
+    showToast('Réponse IA reçue');
+  } catch (err) {
+    setError(`Erreur IA: ${err.message}`);
+    setStage('');
+    showToast(`Erreur IA: ${err.message}`, 'error');
+  }
+};
+
+
 
   const handleImportQR = () => {
-    if (!importedQ.trim() || !importedA.trim()) return showToast('Veuillez remplir les deux champs', 'error');
-    setHistory(prev => [{ question: importedQ, answer: importedA, model }, ...prev].slice(0, 15));
-    setShowImportModal(false); setImportedQ(''); setImportedA(''); showToast('Q/R importée avec succès');
-  };
+  if (!importedQ.trim() || !importedA.trim())
+    return showToast('Veuillez remplir les deux champs', 'error');
+  setHistory(prev => [
+    {
+      question: importedQ,
+      // on stocke un fil de messages !
+      messages: [
+        { role: 'user', text: importedQ },
+        { role: 'assistant', text: importedA }
+      ],
+      model
+    },
+    ...prev
+  ].slice(0, 15));
+  setShowImportModal(false);
+  setImportedQ('');
+  setImportedA('');
+  showToast('Q/R importée avec succès');
+};
+
 
   
-  const handleCopyAnswer = async () => { if (!answer) return; try { await navigator.clipboard.writeText(answer); } catch {} };
+  const handleCopyAnswer = async () => {
+  // Cherche le dernier message du role assistant (IA)
+  const lastAssistantMsg =
+    messages.slice().reverse().find(m => m.role === 'assistant')?.text || '';
+  if (!lastAssistantMsg) return;
+  try {
+    await navigator.clipboard.writeText(lastAssistantMsg);
+  } catch {}
+};
+
 
   const handleEngineChange = (next) => {
     setEngine(next);
@@ -640,24 +700,31 @@ const handleCopyToLibrary = () => {
 
  
 const handlePrintAnswer = () => {
-  if (!answer) return;
+  if (!messages || messages.length === 0) return;
   const printWin = window.open('', '_blank');
   if (!printWin) {
     setError('Impression bloquée (autorise les popups ?)');
     return;
   }
+
+  // Concatène tous les messages assistant (si tu veux le dernier seulement, adapte !)
+  const printable = messages
+    .filter(m => m.role === 'assistant')
+    .map(m => m.text)
+    .join('\n\n');
+
   printWin.document.write(`
     <html>
       <head><title>Réponse Themis</title></head>
       <body>
-        <pre>${answer}</pre>
+        <pre>${printable}</pre>
         <button onclick="window.print()">Imprimer cette réponse</button>
       </body>
     </html>
   `);
   printWin.document.close();
-  // NE METS PAS `printWin.print();`
 };
+
 
 
 
@@ -669,12 +736,12 @@ const [showPrintModal, setShowPrintModal] = useState(false);
 // Handler actualiser (efface tout)
 const handleRefreshAll = () => {
   setQuestion('');
-  setAnswer('');
+  setMessages([]);      // Vide tout le chat
   setHistory([]);
   setError('');
   setExtractedText('');
-  setToast({ message: 'Tout a été effacé', type: 'success' });
 };
+
 
 
 const handleFileExtract = async (file: File | null) => {
@@ -753,7 +820,7 @@ const extractTextFromFile = async (file: File): Promise<string> => {
 
  // Handler export Word (unique, async – fusion backend/client)
 const handleWordExport = async () => {
-  if (!question.trim() || !answer.trim()) {
+  if (!question.trim() || !messages.trim()) {
     setError('Question ou réponse vide pour export.');
     return;
   }
@@ -766,8 +833,9 @@ const handleWordExport = async () => {
     
     // Tente backend (Flask /api/generate-doc si existant)
     try {
-      const { filename: backendFilename } = await generateDoc(question, answer, model);
-      filename = backendFilename || filename;
+      const lastAssistant = messages.filter(m => m.role === 'assistant').slice(-1)[0]?.text || '';
+      const { filename: backendFilename } = await generateDoc(question, lastAssistant, model);
+
       showToast('Document Word généré via backend');
     } catch (backendErr) {
       console.warn('Backend indisponible, fallback client:', backendErr);
@@ -780,7 +848,7 @@ const handleWordExport = async () => {
             new Paragraph({ children: [new TextRun({ text: question, size: 20 })] }),
             new Paragraph({ children: [new TextRun({ text: '\n' })] }),
             new Paragraph({ children: [new TextRun({ text: 'Réponse:', bold: true, size: 24 })] }),
-            new Paragraph({ children: [new TextRun({ text: answer, size: 20 })] }),
+            new Paragraph({ children: [new TextRun({ text: messages, size: 20 })] }),
           ],
         }],
       });
@@ -820,42 +888,49 @@ const [isFullscreen, setIsFullscreen] = useState(false);
    
 
 const handlePrint = () => {
-  if (!question.trim() || !answer.trim()) {
-    setError('Question ou réponse vide pour impression.');
-    return;
-  }
-  const printWin = window.open('', '_blank');
-  if (!printWin) {
-    setError('Impression bloquée (autorise les popups ?)');
-    return;
-  }
-  printWin.document.write(`
-    <html>
-      <head>
-        <title>Réponse Themis</title>
-        <style>body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; } h1 { color: #333; } h2 { margin-top: 20px; } pre { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border-left: 3px solid #007bff; }</style>
-      </head>
-      <body>
-        <h1>Réponse Themis</h1>
-        <h2>Question:</h2>
-        <pre>${question}</pre>
-        <h2>Réponse:</h2>
-        <pre>${answer}</pre>
-        <button onclick="window.print()">Imprimer cette réponse</button>
-      </body>
-    </html>
-  `);
-  printWin.document.close();
+  // Vérifie que la question n'est pas vide
+  if (!question.trim() || !messages.filter(m => m.role === 'assistant').length) {
+    setError('Question ou réponse vide pour impression.');
+    return;
+  }
+  const printWin = window.open('', '_blank');
+  if (!printWin) {
+    setError('Impression bloquée (autorise les popups ?)');
+    return;
+  }
 
-  // printWin.close();    <-- peut être gardé si tu veux fermer après impression, à mettre après printWin.print()
-  setShowPrintModal(false);
-  setToast?.({ message: 'Aperçu impression ouvert !', type: 'success' });
+  // Prend TOUTES les réponses assistant
+  const printable = messages
+    .filter(m => m.role === 'assistant')
+    .map(m => m.text)
+    .join('\n\n');
+
+  printWin.document.write(`
+    <html>
+      <head>
+        <title>Réponse Themis</title>
+        <style>body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; } h1 { color: #333; } h2 { margin-top: 20px; } pre { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border-left: 3px solid #007bff; }</style>
+      </head>
+      <body>
+        <h1>Réponse Themis</h1>
+        <h2>Question:</h2>
+        <pre>${question}</pre>
+        <h2>Réponse:</h2>
+        <pre>${printable}</pre>
+        <button onclick="window.print()">Imprimer cette réponse</button>
+      </body>
+    </html>
+  `);
+  printWin.document.close();
+  setShowPrintModal(false);
+  setToast?.({ message: 'Aperçu impression ouvert !', type: 'success' });
 };
+
 
 
 // Handler export PDF (unique, HTML fallback pour PDF-like)
 const handleExportPDF = async () => {
-  if (!question.trim() || !answer.trim()) {
+  if (!question.trim() || !messages.trim()) {
     setError('Question ou réponse vide pour export.');
     return;
   }
@@ -874,7 +949,7 @@ const handleExportPDF = async () => {
           <h2>Question:</h2>
           <pre>${question}</pre>
           <h2>Réponse:</h2>
-          <pre>${answer}</pre>
+          <pre>${messages}</pre>
         </body>
       </html>
     `;
@@ -906,34 +981,43 @@ const handleExportPDF = async () => {
 
 
 
-  return (
-    <>
-      {/* Modal Impression */}
-      {showPrintModal && answer && (
-        <DraggableModal
-          isOpen={showPrintModal}
-          onClose={() => setShowPrintModal(false)}
-          title="Impression"
-          size="md"
-        >
-          <div className="p-4">
-            <pre className="whitespace-pre-wrap">{answer}</pre>
-            <div className="mt-4 flex justify-end">
-              <ThemisButton onClick={handlePrintAnswer} variant="primary">
-                Imprimer
-              </ThemisButton>
-            </div>
-          </div>
-        </DraggableModal>
-      )}
+      return (
+        <>
+          {showPrintModal && messages.length && (
+  <DraggableModal
+    isOpen={showPrintModal}
+    onClose={() => setShowPrintModal(false)}
+    title="Impression"
+    size="md"
+  >
+    <div className="p-4">
+      <div className="max-h-96 overflow-y-auto">
+        <pre className="whitespace-pre-wrap">
+          {messages.filter(m => m.role === 'assistant').map(m => m.text).join('\n\n')}
+        </pre>
+      </div>
 
-      <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
-        {/* Sidebar gauche : bibliothèque */}
-        {showLibrary && (
-          <aside className="w-80 bg-white/80 dark:bg-gray-800/80 p-4 border-r">
-            <LibrarySidebar onStructureChange={setLibraryStructure} />
-          </aside>
-        )}
+      <div className="mt-4 flex justify-end gap-2">
+        <ThemisButton onClick={() => setShowPrintModal(false)} variant="outline">
+          Annuler
+        </ThemisButton>
+        <ThemisButton onClick={handlePrintAnswer} variant="primary">
+          Imprimer
+        </ThemisButton>
+      </div>
+    </div>
+  </DraggableModal>
+)}
+
+
+          <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+            {showLibrary && (
+              <aside className="w-80 bg-white/80 dark:bg-gray-800/80 p-4 border-r">
+                <LibrarySidebar onStructureChange={setLibraryStructure} />
+              </aside>
+            )}
+
+    
 
         {/* Contenu principal */}
         <main className="flex-1 flex flex-col p-6">
@@ -1034,53 +1118,89 @@ const handleExportPDF = async () => {
           </div>
 
           {/* Zone de question */}
-          <textarea
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            rows={3}
-            className="w-full p-3 border mb-2"
-            placeholder="Posez votre question à l’IA…"
-          />
-          <div className="flex gap-2 mb-4">
-            <ThemisButton
-              onClick={handleAskAI}
-              disabled={!question.trim()}
-              variant="primary"
-              icon={<FaBalanceScale />}
-            >
-              Poser la question
-            </ThemisButton>
-            <ThemisButton
-              onClick={handleClear}
-              variant="outline"
-              icon={<FaSyncAlt />}
-            >
-              Effacer
-            </ThemisButton>
-          </div>
+<textarea
+  value={question}
+  onChange={e => setQuestion(e.target.value)}
+  rows={3}
+  className="w-full p-3 border mb-2"
+  placeholder="Posez votre question à l’IA…"
+/>
+<div className="flex gap-2 mb-4">
+  <ThemisButton
+    onClick={handleAskAI}
+    disabled={!question.trim()}
+    variant="primary"
+    icon={<FaBalanceScale />}
+  >
+    Poser la question
+  </ThemisButton>
+  <ThemisButton
+    onClick={handleClear}
+    variant="outline"
+    icon={<FaSyncAlt />}
+  >
+    Effacer
+  </ThemisButton>
+</div>
 
-          {/* Erreur */}
-          {error && (
-            <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/50 border-l-4 border-red-500">
-              <strong>Erreur :</strong> {error}
-            </div>
-          )}
-
-          {/* Réponse (fond neutre, sans vert) */}
-{answer && (
-  <div className="mb-4 p-4 bg-transparent border-0 relative">  {/* Neutre : transparent, pas de border */}
-    <h5 className="font-semibold mb-2 text-white">Réponse :</h5>  {/* Text white pour dark */}
-    <pre className="whitespace-pre-wrap text-sm text-gray-200">{answer}</pre>  {/* Gris clair pour lisibilité */}
-    <ThemisButton
-      onClick={handleCopyAnswer}
-      size="sm"
-      variant="outline"
-      className="absolute top-2 right-2"
-    >
-      Copier  {/* Ajoute label si pas (ex. icon + texte) */}
-    </ThemisButton>
+{/* Erreur */}
+{error && (
+  <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/50 border-l-4 border-red-500">
+    <strong>Erreur :</strong> {error}
   </div>
 )}
+
+{/* Affichage chat */}
+<div
+  className="chat-history mb-4"
+  style={{
+    maxHeight: '50vh',
+    overflowY: 'auto',
+    background: 'rgba(30,30,30,0.95)',
+    borderRadius: '8px',
+    padding: '8px',
+    marginBottom: '1rem'
+  }}
+>
+  {messages.length === 0 && (
+    <div className="text-gray-400 italic">
+      Posez votre première question…
+    </div>
+  )}
+
+  {messages.map((msg, i) => (
+    <div
+      key={i}
+      className={msg.role === 'user' ? 'text-right' : 'text-left'}
+    >
+      <div
+        className={
+          msg.role === 'user'
+            ? "inline-block bg-blue-100 dark:bg-blue-800 text-blue-900 dark:text-blue-100 px-3 py-2 rounded-lg mb-1"
+            : "inline-block bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-3 py-2 rounded-lg mb-1"
+        }
+        style={{ maxWidth: '70%' }}
+      >
+        {msg.text}
+      </div>
+    </div>
+  ))}
+</div>
+
+{/* Optionnel bouton copier la dernière réponse IA */}
+{messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
+  <ThemisButton
+    onClick={() => navigator.clipboard.writeText(messages[messages.length - 1].text)}
+    size="sm"
+    variant="outline"
+    className="mb-4"
+  >
+    Copier la dernière réponse
+  </ThemisButton>
+)}
+
+
+
 
 
           
@@ -1250,7 +1370,13 @@ const handleExportPDF = async () => {
     <ThemisButton
       onClick={handleWordExport}
       variant="success"
-      disabled={loadingExport || !question.trim() || !answer.trim()}
+      disabled={
+  loadingExport ||
+  !question.trim() ||
+  messages.length === 0 ||
+  messages[messages.length - 1].role !== 'assistant'
+}
+
       icon={<FaFileWord />}
       size="sm"
       className="w-full"
@@ -1259,80 +1385,111 @@ const handleExportPDF = async () => {
     </ThemisButton>
 
     {/* Copier Réponse (disabled si pas answer) */}
-    <ThemisButton
-      onClick={handleCopyAnswer}
-      variant="primary"
-      disabled={!answer.trim()}
-      icon={<FaCopy />}
-      size="sm"
-      className="w-full"
-    >
-      Copier Réponse
-    </ThemisButton>
+    {messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
+  <ThemisButton
+    onClick={() => navigator.clipboard.writeText(messages[messages.length - 1].text)}
+    variant="primary"
+    icon={<FaCopy />}
+    size="sm"
+    className="w-full"
+  >
+    Copier
+  </ThemisButton>
+)}
+
 
     {/* Imprimer (disabled si pas answer) */}
     <ThemisButton
-      onClick={() => setShowPrintModal(true)}
-      variant="dark"
-      disabled={!answer.trim()}
-      icon={<FaPrint />}
-      size="sm"
-      className="w-full"
-    >
-      Imprimer
-    </ThemisButton>
+  onClick={() => setShowPrintModal(true)}
+  variant="dark"
+  disabled={messages.length === 0 || messages[messages.length - 1].role !== 'assistant'}
+  icon={<FaPrint />}
+  size="sm"
+  className="w-full"
+>
+  Imprimer la réponse IA
+</ThemisButton>
+
 
     {/* Importer Q/R */}
-    <ThemisButton
-      onClick={() => setShowImportModal(true)}
-      variant="secondary"
-      icon={<FaUpload />}
-      size="sm"
-      className="w-full"
-    >
-      Importer Q/R
-    </ThemisButton>
-  </div>
+<ThemisButton
+  onClick={() => setShowImportModal(true)}
+  variant="secondary"
+  icon={<FaUpload />}
+  size="sm"
+  className="w-full"
+>
+  Importer Q/R
+</ThemisButton>
+</div>
 
-  {/* Historique Q/R bas (flex-1, mt-4, scrollable 5 derniers, clickable) */}
-  <div className="flex-1 mt-4 overflow-hidden flex flex-col">
-    <h6 className="text-xs font-semibold text-gray-600 mb-2 sticky top-0 bg-white/80 dark:bg-gray-800/80 py-1 z-10">
-      Historique (5 derniers)
-    </h6>
-    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 pr-1">
-      {history.length > 0 ? (
-        <div className="space-y-1">
-          {history.slice(-5).reverse().map((h, i) => (  // Reverse pour plus récent en haut
-            <div
-              key={`hist-${i}-${h.question.substring(0, 20)}`}  // Unique key
-              className="p-2 bg-gray-100/50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600 text-xs cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              onClick={() => {
-                setQuestion(h.question);
-                setAnswer(h.answer);
-                setError('');  // Clear error
-                console.log(`Historique chargé #${history.length - i}: ${h.question.substring(0, 50)}...`);
-              }}
-              title={`Q: ${h.question}\nR: ${h.answer}`}  // Tooltip full
-            >
-              <div className="font-medium text-gray-800 dark:text-gray-200 truncate">
-                Q: {h.question.length > 35 ? `${h.question.substring(0, 35)}...` : h.question}
-              </div>
-              <div className="text-gray-600 dark:text-gray-300 text-[10px] truncate mt-0.5">
-                R: {h.answer.length > 50 ? `${h.answer.substring(0, 50)}...` : h.answer}
-              </div>
-              <div className="text-[8px] text-gray-400 mt-1">
-                {new Date(h.timestamp || Date.now()).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-              </div>
+<div className="flex-1 mt-4 overflow-hidden flex flex-col">
+  <h6 className="text-xs font-semibold text-gray-600 mb-2 sticky top-0 bg-white/80 dark:bg-gray-800/80 py-1 z-10">
+    Historique (5 derniers)
+  </h6>
+  <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 pr-1">
+    {history.length > 0 ? (
+      <div className="space-y-1">
+        {history.slice(-5).reverse().map((h, i) => (
+          <div
+            key={`hist-${i}-${h.question.substring(0, 20)}`}
+            className="p-2 bg-gray-100/50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600 text-xs cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            onClick={() => {
+              // robustesse : conversion si pas array
+              if (Array.isArray(h.messages)) {
+                setMessages(h.messages);
+              } else if (typeof h.answer === "string" && h.answer.trim()) {
+                setMessages([
+                  { role: 'user', text: h.question },
+                  { role: 'assistant', text: h.answer }
+                ]);
+              } else if (typeof h.messages === "string" && h.messages.trim()) {
+                setMessages([
+                  { role: 'user', text: h.question },
+                  { role: 'assistant', text: h.messages }
+                ]);
+              } else {
+                setMessages([]);
+              }
+              setQuestion(h.question);
+              setError('');
+              console.log(`Historique chargé #${history.length - i}: ${h.question.substring(0, 50)}...`);
+            }}
+            title={`Q: ${h.question}\nR: ${
+              Array.isArray(h.messages)
+                ? h.messages.filter(m => m.role === 'assistant').map(m => m.text).join('\n')
+                : typeof h.answer === "string"
+                  ? h.answer
+                  : h.messages
+            }`}
+          >
+            <div className="font-medium text-gray-800 dark:text-gray-200 truncate">
+              Q: {h.question.length > 35 ? `${h.question.substring(0, 35)}...` : h.question}
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-xs italic">
-          Aucune question posée encore...
-        </div>
-      )}
-    </div>
+            <div className="text-gray-600 dark:text-gray-300 text-[10px] truncate mt-0.5">
+              R: {Array.isArray(h.messages)
+                ? h.messages.filter(m => m.role === 'assistant').map(m => m.text).join(' | ').substring(0, 50)
+                : typeof h.answer === "string"
+                  ? h.answer.substring(0, 50)
+                  : String(h.messages).substring(0, 50)
+              }
+              {Array.isArray(h.messages) && h.messages.filter(m => m.role === 'assistant').length > 0 && "..."}
+            </div>
+            <div className="text-[8px] text-gray-400 mt-1">
+              {new Date(h.timestamp || Date.now()).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-xs italic">
+        Aucune question posée encore...
+      </div>
+    )}
   </div>
+</div>
+
+
   </aside>
       </div>
     </>

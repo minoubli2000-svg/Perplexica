@@ -56,7 +56,7 @@ const ROLES = [
 ];
 
 // ===== Utilitaires modèle =====
-const toBackendModel = (engine, modelValue) => {
+const toBackendModel = (engine: string, modelValue: string): string => {
   switch (engine) {
     case 'perplexity':
       return `perplexity:${modelValue || 'sonar'}`;
@@ -65,13 +65,13 @@ const toBackendModel = (engine, modelValue) => {
     case 'ollama':
       return `ollama:${modelValue || 'llama3'}`;
     case 'gpt':
-      return `perplexity:${modelValue || 'sonar'}`;
+      return `gpt:${modelValue || 'gpt-3.5-turbo'}`;
     default:
       return '';
   }
 };
 
-const modelFamily = (modelString) => {
+const modelFamily = (modelString: string): string => {
   if (!modelString) return 'general';
   const fam = modelString.split(':')[0];
   return fam || 'general';
@@ -84,17 +84,181 @@ const modelFamily = (modelString) => {
 // ===== SERVICES API =====
 const API_BASE = 'http://localhost:3001';
 
-const askIA = async (prompt, model) => {
+const askIA = async (prompt: string, model: string, onChunk: (chunk: { done: boolean; text: string }) => void) => {
   const res = await fetch(`${API_BASE}/api/ia`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream' // Demander le streaming
+    },
     body: JSON.stringify({ prompt, model }),
   });
-  let j; try { j = await res.json(); } catch { j = {}; }
-  if (!res.ok) throw new Error(j.error || res.statusText || 'Erreur IA');
-  if (!j.result || !String(j.result).trim()) throw new Error('Réponse IA vide');
-  return j;
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || res.statusText || 'Erreur IA');
+  }
+
+  // Vérifier si c'est du SSE (streaming)
+  if (res.headers.get('content-type')?.includes('text/event-stream')) {
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Pas de body stream disponible');
+
+    const decoder = new TextDecoder();
+    let fullResponse = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              onChunk?.({ done: true, text: fullResponse });
+              break;
+            }
+            try {
+              const json = JSON.parse(data);
+              if (json.result) {
+                fullResponse += json.result;
+                onChunk?.({ done: false, text: json.result });
+              }
+            } catch (e) {
+              // Ignore les lignes non-JSON
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return { result: fullResponse };
+  } else {
+    // Fallback : réponse JSON classique
+    const json = await res.json();
+    if (!json.result || !String(json.result).trim()) {
+      throw new Error('Réponse IA vide');
+    }
+    onChunk?.({ done: true, text: json.result });
+    return json;
+  }
 };
+
+// ===== Handler IA avec streaming =====
+const handleAskAI = async () => {
+  if (!question.trim()) {
+    setError('Veuillez entrer une question');
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+  let streamedResponse = '';
+
+  try {
+    const currentModel = models[engine];
+    const model = toBackendModel(engine, currentModel);
+
+    // ✅ AJOUTER TOUT L'HISTORIQUE DE MESSAGES (contexte chat)
+    const fullMessages = [
+      ...messages,
+      { role: 'user', text: question }
+    ];
+
+    // Ajouter le message utilisateur au chat
+    setMessages(prev => [...prev, { role: 'user', text: question }]);
+    
+    // Ajouter un placeholder pour la réponse IA
+    setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
+
+    // ✅ ENVOYER LES MESSAGES AVEC LE CONTEXTE
+    const res = await fetch(`${API_BASE}/api/ia`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify({ 
+        prompt: question,
+        model,
+        messages: fullMessages  // ✅ NOUVEAU : Passer tous les messages
+      }),
+    });
+
+    if (!res.ok) throw new Error('Erreur serveur');
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Pas de stream');
+
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          if (dataStr === '[DONE]') break;
+          
+          try {
+            const json = JSON.parse(dataStr);
+            if (json.result) {
+              streamedResponse += json.result;
+              
+              // Mettre à jour en temps réel
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  role: 'assistant',
+                  text: streamedResponse
+                };
+                return updated;
+              });
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+    }
+
+    reader.releaseLock();
+    setQuestion('');
+    setLoading(false);
+
+    // ✅ Sauvegarder dans l'historique
+    setHistory(prev => [
+      ...prev,
+      {
+        question,
+        messages: [
+          ...messages,
+          { role: 'user', text: question },
+          { role: 'assistant', text: streamedResponse }
+        ],
+        model,
+        timestamp: new Date().toISOString()
+      }
+    ].slice(0, 15));
+
+  } catch (err) {
+    setError((err as Error).message);
+    setLoading(false);
+  }
+};
+
+
+
 
 
 
@@ -471,7 +635,7 @@ export default function Themis() {
   const [showLibrary, setShowLibrary] = useState(true);
   const [theme, setTheme] = useState('dark');
   const [libraryStructure, setLibraryStructure] = useState(null);
-
+  const [sessionId, setSessionId] = useState<string | null>(null);
   
   
   const fileExtractInputRef = useRef<HTMLInputElement>(null);
@@ -490,18 +654,19 @@ export default function Themis() {
   });
 
   
-const [messages, setMessages] = useState(() => {
+  const [messages, setMessages] = useState(() => {
   const saved = localStorage.getItem('themis_chat');
   return saved ? JSON.parse(saved) : [];
-});
+  });
 
-const [question, setQuestion] = useState('');
+  const [question, setQuestion] = useState('');
 
 
   const [extractedText, setExtractedText] = useState('');
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState<any[]>([]);
 
- 
+  const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
  
  
  const handleExtract = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -594,63 +759,190 @@ const [question, setQuestion] = useState('');
   setStage('');
   setError('');
 };
+  
+  useEffect(() => {
+    const initSession = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/session`);
+        const data = await res.json();
+        setSessionId(data.session_id);
+        console.log('Session créée:', data.session_id);
+      } catch (err) {
+        console.error('Erreur création session:', err);
+      }
+    };
+    
+    initSession();
+  }, []);  // ← S'exécute une fois au montage
 
+    
+   
 
+  
   const handleAskAI = async () => {
-  if (!question.trim()) return;
-  setStage('Interrogation IA en cours...');
-  setError('');
+    if (!question.trim()) {
+      setError('Veuillez entrer une question');
+      return;
+    }
 
-  const currentMessages = [...messages, { role: 'user', text: question }];
-  setMessages(currentMessages);
-  setQuestion('');
+    if (!sessionId) {
+      setError('Création de session en cours...');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    let streamedResponse = '';
+
+    try {
+      const currentModel = models[engine];
+      const model = toBackendModel(engine, currentModel);
+
+      // Ajouter le message utilisateur au chat
+      setMessages(prev => [...prev, { role: 'user', text: question }]);
+      
+      // Ajouter un placeholder pour la réponse IA
+      setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
+
+      // ✅ ENVOYER LA SESSION_ID
+      const res = await fetch(`${API_BASE}/api/ia`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify({ 
+          prompt: question,
+          model,
+          session_id: sessionId  // ✅ CRUCIAL
+        }),
+      });
+
+      if (!res.ok) throw new Error('Erreur serveur');
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('Pas de stream');
+
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') break;
+            
+            try {
+              const json = JSON.parse(dataStr);
+              if (json.result) {
+                streamedResponse += json.result;
+                
+                // Mettre à jour en temps réel
+                setMessages(prev => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: 'assistant',
+                    text: streamedResponse
+                  };
+                  return updated;
+                });
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+      }
+
+      reader.releaseLock();
+      setQuestion('');
+      setLoading(false);
+
+    } catch (err) {
+      setError((err as Error).message);
+      setLoading(false);
+    }
+  };
+
+  const handleNewConversation = async () => {
+    try {
+      if (sessionId) {
+        await fetch(`${API_BASE}/api/session/${sessionId}`, { method: 'DELETE' });
+      }
+      const res = await fetch(`${API_BASE}/api/session`);
+      const data = await res.json();
+      setSessionId(data.session_id);
+      setMessages([]);
+      setQuestion('');
+      setError('');
+      console.log('Nouvelle session créée');
+    } catch (err) {
+      console.error('Erreur création session:', err);
+    }
+  };
+
+ 
+  const handleImportQR = async () => {
+  if (!importedQ.trim() || !importedA.trim())
+    return showToast('Veuillez remplir les deux champs', 'error');
 
   try {
-    const prompt = currentMessages.map(m => `${m.role}: ${m.text}`).join('\n');
-    const res = await askIA(prompt, model);
-    if (!res.result) throw new Error('Aucune réponse reçue');
+    // ✅ AJOUTER LA Q/R AUX MESSAGES DE CHAT
+    setMessages(prev => [
+      ...prev,
+      { role: 'user', text: importedQ },
+      { role: 'assistant', text: importedA }
+    ]);
 
-    const newMessages = [...currentMessages, { role: 'assistant', text: res.result }];
-    setMessages(newMessages);
-
+    // ✅ SAUVEGARDER DANS L'HISTORIQUE
     setHistory(prev => [
-      { question, messages: newMessages, model },
+      {
+        question: importedQ,
+        messages: [
+          { role: 'user', text: importedQ },
+          { role: 'assistant', text: importedA }
+        ],
+        model: `${engine}:${models[engine]}`, // ← CHANGÉ
+        timestamp: new Date().toISOString()
+      },
       ...prev
     ].slice(0, 15));
 
-    setStage('Réponse reçue');
-    showToast('Réponse IA reçue');
+    // ✅ AJOUTER À LA SESSION CÔTÉ SERVEUR POUR LE CONTEXTE
+    if (sessionId) {
+      try {
+        await fetch(`${API_BASE}/api/session/add-context`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            messages: [
+              { role: 'user', text: importedQ },
+              { role: 'assistant', text: importedA }
+            ]
+          })
+        }).catch(err => console.warn('Sync session échoué:', err));
+      } catch (err) {
+        console.warn('Erreur sync session:', err);
+      }
+    }
+
+    setShowImportModal(false);
+    setImportedQ('');
+    setImportedA('');
+    showToast('Q/R importée avec succès et ajoutée au contexte');
   } catch (err) {
-    setError(`Erreur IA: ${err.message}`);
-    setStage('');
-    showToast(`Erreur IA: ${err.message}`, 'error');
+    showToast('Erreur import Q/R', 'error');
+    console.error(err);
   }
 };
 
 
-
-
-
-  const handleImportQR = () => {
-  if (!importedQ.trim() || !importedA.trim())
-    return showToast('Veuillez remplir les deux champs', 'error');
-  setHistory(prev => [
-    {
-      question: importedQ,
-      // on stocke un fil de messages !
-      messages: [
-        { role: 'user', text: importedQ },
-        { role: 'assistant', text: importedA }
-      ],
-      model
-    },
-    ...prev
-  ].slice(0, 15));
-  setShowImportModal(false);
-  setImportedQ('');
-  setImportedA('');
-  showToast('Q/R importée avec succès');
-};
 
 
   
@@ -928,7 +1220,6 @@ const handlePrint = () => {
 
 
 
-// Handler export PDF (unique, HTML fallback pour PDF-like)
 const handleExportPDF = async () => {
   if (!question.trim() || !messages.trim()) {
     setError('Question ou réponse vide pour export.');
@@ -936,7 +1227,7 @@ const handleExportPDF = async () => {
   }
   
   const timestamp = new Date().toISOString().split('T')[0];
-  const filename = `reponse_themis_${timestamp}.html`;  // HTML printable (comme PDF dans navigateur)
+  const filename = `reponse_themis_${timestamp}.html`;
   
   try {
     const htmlContent = `
@@ -965,30 +1256,21 @@ const handleExportPDF = async () => {
     URL.revokeObjectURL(url);
     
     setShowPrintModal(false);
-    setToast?.({ message: `Export HTML réussi ! Ouvre et imprime comme PDF.`, type: 'success' });
   } catch (err) {
     setError('Export PDF échoué: ' + (err as Error).message);
-    console.error('PDF export error:', err);
   }
 };
 
+// ✅ AJOUTER LE RETURN ICI (pas après les lignes orphelines!)
 
-
-
-
-
-
-
-
-
-      return (
-        <>
-          {showPrintModal && messages.length && (
-  <DraggableModal
-    isOpen={showPrintModal}
-    onClose={() => setShowPrintModal(false)}
-    title="Impression"
-    size="md"
+return (
+  <>
+    {showPrintModal && messages.length && (
+      <DraggableModal
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        title="Impression"
+        size="md"
   >
     <div className="p-4">
       <div className="max-h-96 overflow-y-auto">
@@ -1411,87 +1693,178 @@ const handleExportPDF = async () => {
 </ThemisButton>
 
 
-    {/* Importer Q/R */}
-<ThemisButton
-  onClick={() => setShowImportModal(true)}
-  variant="secondary"
-  icon={<FaUpload />}
-  size="sm"
-  className="w-full"
->
-  Importer Q/R
-</ThemisButton>
-</div>
-
-<div className="flex-1 mt-4 overflow-hidden flex flex-col">
-  <h6 className="text-xs font-semibold text-gray-600 mb-2 sticky top-0 bg-white/80 dark:bg-gray-800/80 py-1 z-10">
-    Historique (5 derniers)
-  </h6>
-  <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 pr-1">
-    {history.length > 0 ? (
-      <div className="space-y-1">
-        {history.slice(-5).reverse().map((h, i) => (
-          <div
-            key={`hist-${i}-${h.question.substring(0, 20)}`}
-            className="p-2 bg-gray-100/50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600 text-xs cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            onClick={() => {
-              // robustesse : conversion si pas array
-              if (Array.isArray(h.messages)) {
-                setMessages(h.messages);
-              } else if (typeof h.answer === "string" && h.answer.trim()) {
-                setMessages([
-                  { role: 'user', text: h.question },
-                  { role: 'assistant', text: h.answer }
-                ]);
-              } else if (typeof h.messages === "string" && h.messages.trim()) {
-                setMessages([
-                  { role: 'user', text: h.question },
-                  { role: 'assistant', text: h.messages }
-                ]);
-              } else {
-                setMessages([]);
-              }
-              setQuestion(h.question);
-              setError('');
-              console.log(`Historique chargé #${history.length - i}: ${h.question.substring(0, 50)}...`);
-            }}
-            title={`Q: ${h.question}\nR: ${
-              Array.isArray(h.messages)
-                ? h.messages.filter(m => m.role === 'assistant').map(m => m.text).join('\n')
-                : typeof h.answer === "string"
-                  ? h.answer
-                  : h.messages
-            }`}
-          >
-            <div className="font-medium text-gray-800 dark:text-gray-200 truncate">
-              Q: {h.question.length > 35 ? `${h.question.substring(0, 35)}...` : h.question}
-            </div>
-            <div className="text-gray-600 dark:text-gray-300 text-[10px] truncate mt-0.5">
-              R: {Array.isArray(h.messages)
-                ? h.messages.filter(m => m.role === 'assistant').map(m => m.text).join(' | ').substring(0, 50)
-                : typeof h.answer === "string"
-                  ? h.answer.substring(0, 50)
-                  : String(h.messages).substring(0, 50)
-              }
-              {Array.isArray(h.messages) && h.messages.filter(m => m.role === 'assistant').length > 0 && "..."}
-            </div>
-            <div className="text-[8px] text-gray-400 mt-1">
-              {new Date(h.timestamp || Date.now()).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-          </div>
-        ))}
-      </div>
-    ) : (
-      <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-xs italic">
-        Aucune question posée encore...
-      </div>
-    )}
+       {/* Importer Q/R */}
+    <ThemisButton
+      onClick={() => setShowImportModal(true)}
+      variant="secondary"
+      icon={<FaUpload />}
+      size="sm"
+      className="w-full"
+    >
+      Importer Q/R
+    </ThemisButton>
+    
+    {/* Nouvelle Conversation */}
+    <ThemisButton
+      onClick={handleNewConversation}
+      variant="outline"
+      icon={<FaSync />}
+      size="sm"
+      className="w-full"
+    >
+      Nouvelle Conv
+    </ThemisButton>
+    
   </div>
-</div>
 
+  {/* Modal Importer Q/R */}
+  {showImportModal && (
+    <>
+      <div
+        className="fixed inset-0 bg-black bg-opacity-40 z-40"
+        onClick={() => setShowImportModal(false)}
+      />
+      <DraggableModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Importer Q/R"
+        size="md"
+      >
+        <div className="space-y-4 p-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Question :</label>
+            <textarea
+              value={importedQ}
+              onChange={e => setImportedQ(e.target.value)}
+              rows={3}
+              className="w-full p-2 border rounded"
+              placeholder="Coller la question..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Réponse :</label>
+            <textarea
+              value={importedA}
+              onChange={e => setImportedA(e.target.value)}
+              rows={3}
+              className="w-full p-2 border rounded"
+              placeholder="Coller la réponse..."
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <ThemisButton
+              onClick={() => setShowImportModal(false)}
+              variant="outline"
+            >
+              Annuler
+            </ThemisButton>
+            <ThemisButton
+              onClick={handleImportQR}
+              variant="primary"
+            >
+              Importer
+            </ThemisButton>
+          </div>
+        </div>
+      </DraggableModal>
+    </>
+  )}
 
-  </aside>
+  {/* Historique */}
+  <div className="flex-1 mt-4 overflow-hidden flex flex-col">
+    <h6 className="text-xs font-semibold text-gray-600 mb-2 sticky top-0 bg-white/80 dark:bg-gray-800/80 py-1 z-10">
+      Historique (5 derniers)
+    </h6>
+    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 pr-1">
+      {history.length > 0 ? (
+        <div className="space-y-1">
+          {history.slice(-5).reverse().map((h, i) => {
+            const safeQuestion = h?.question || "";
+            const questionDisplay =
+              safeQuestion.length > 35
+                ? `${safeQuestion.substring(0, 35)}...`
+                : safeQuestion;
+
+            let answerDisplay = "";
+            if (Array.isArray(h?.messages)) {
+              answerDisplay = h.messages
+                .filter((m: any) => m.role === "assistant")
+                .map((m: any) => m.text)
+                .join(" | ")
+                .substring(0, 50);
+            } else if (typeof h?.answer === "string") {
+              answerDisplay = h.answer.substring(0, 50);
+            } else if (typeof h?.messages === "string") {
+              answerDisplay = String(h.messages).substring(0, 50);
+            }
+
+            const timeDisplay = h?.timestamp
+              ? new Date(h.timestamp).toLocaleString("fr-FR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : new Date().toLocaleString("fr-FR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+
+            return (
+              <div
+                key={`hist-${i}-${safeQuestion.substring(0, 20)}`}
+                className="p-2 bg-gray-100/50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600 text-xs cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                onClick={() => {
+                  if (Array.isArray(h.messages)) {
+                    setMessages(h.messages);
+                  } else if (typeof h.answer === "string" && h.answer.trim()) {
+                    setMessages([
+                      { role: "user", text: safeQuestion },
+                      { role: "assistant", text: h.answer },
+                    ]);
+                  } else if (typeof h.messages === "string" && h.messages.trim()) {
+                    setMessages([
+                      { role: "user", text: safeQuestion },
+                      { role: "assistant", text: h.messages },
+                    ]);
+                  } else {
+                    setMessages([]);
+                  }
+                  setQuestion(safeQuestion);
+                  setError("");
+                }}
+                title={`Q: ${safeQuestion}\nR: ${
+                  Array.isArray(h?.messages)
+                    ? h.messages
+                        .filter((m: any) => m.role === "assistant")
+                        .map((m: any) => m.text)
+                        .join("\n")
+                    : typeof h?.answer === "string"
+                    ? h.answer
+                    : h?.messages || ""
+                }`}
+              >
+                <div className="font-medium text-gray-800 dark:text-gray-200 truncate">
+                  Q: {questionDisplay || "(Sans question)"}
+                </div>
+                <div className="text-gray-600 dark:text-gray-300 text-[10px] truncate mt-0.5">
+                  R: {answerDisplay || "(Sans réponse)"}
+                  {Array.isArray(h?.messages) &&
+                    h.messages.filter((m: any) => m.role === "assistant").length >
+                      0 && "..."}
+                </div>
+                <div className="text-[8px] text-gray-400 mt-1">{timeDisplay}</div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-xs italic">
+          Aucune question posée encore...
+        </div>
+      )}
+    </div>
+  </div>
+</aside>
       </div>
     </>
   );
-}    
+}

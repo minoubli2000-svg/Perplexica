@@ -1,9 +1,11 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
+import json
 import subprocess
 import sys
+import uuid
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
@@ -287,65 +289,146 @@ def api_documents_download():
     return jsonify({"error": "fichier introuvable"}), 404
 
 # ------------------ APIs IA (OLLAMA LOCAL RÉEL + PERPLEXITY FALLBACK) ------------------
+
+
+import uuid
+
+# ✅ Stocker les sessions avec leur contexte
+SESSIONS = {}
+
 @app.post("/api/ia")
 def api_ia():
-    """
-    Routage unique IA : Ollama (local, tes modèles llama3/mistral) ou Perplexity (API).
-    JSON: {"prompt": "...", "model": "ollama:llama3" ou "perplexity"}
-    """
-    data = request.get_json(silent=True) or {}
-    prompt = data.get("prompt") or ""
-    model = data.get("model") or os.getenv("OLLAMA_MODEL", "llama3")  # Défaut depuis file.env
+    data = request.get_json(force=True)
+    prompt = data.get("prompt", "")
+    model = data.get("model", "ollama:llama3")
+    session_id = data.get("session_id")  # ✅ NOUVEAU
+    
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    
     if not prompt.strip():
         return jsonify({"error": "prompt vide"}), 400
 
-    if "ollama" in model.lower():
-        # IA réelle Ollama locale (tes modèles : llama3, mistral, phi3, etc.)
-        ollama_model = model.split(":")[1] if ":" in model else model
-        ollama_url = f"http://localhost:{OLLAMA_PORT}/api/generate"
-        try:
-            response = requests.post(
-                ollama_url,
-                json={
-                    "model": ollama_model,
-                    "prompt": prompt,
-                    "stream": False  # JSON simple
-                },
-                timeout=120
-            )
-            if response.status_code != 200:
-                return jsonify({"error": f"Ollama erreur {response.status_code}: {response.text}"}), 503
-            result = response.json()
-            return jsonify({"result": result.get("response", "Pas de réponse Ollama")})
-        except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"Ollama indisponible: {str(e)} (lance ollama serve ?)"}), 503
+    # ✅ Récupérer ou créer la session
+    if session_id not in SESSIONS:
+        SESSIONS[session_id] = {
+            "context": [],
+            "created": datetime.now().isoformat()
+        }
 
-    elif "perplexity" in model.lower():
-        # Fallback Perplexity API (clé de file.env)
-        api_key = os.getenv("PERPLEXITY_API_KEY")
-        if not api_key:
-            return jsonify({"error": "Clé PERPLEXITY_API_KEY manquante (file.env ?)"}), 401
-        try:
-            response = requests.post(
-                "https://api.perplexity.ai/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": "sonar-small-chat",  # Ou sonnet-large-online pour web search
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False
-                },
-                timeout=120
-            )
-            if response.status_code != 200:
-                return jsonify({"error": f"Perplexity erreur {response.status_code}: {response.text}"}), 503
-            result = response.json()
-            content = result["choices"][0]["message"]["content"] if result.get("choices") else "Pas de réponse"
-            return jsonify({"result": content})
-        except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"Perplexity indisponible: {str(e)}"}), 503
-
+    if request.headers.get('Accept') == 'text/event-stream':
+        return stream_ollama_response(prompt, model, session_id)
     else:
-        return jsonify({"error": "Modèle non supporté (ollama:xxx ou perplexity)"}), 400
+        try:
+            model_name = model.split(":")[-1]
+            result = subprocess.run(
+                ['ollama', 'run', model_name, prompt],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=300
+            )
+            output = result.stdout.strip()
+            
+            # ✅ Sauvegarder dans le contexte de session
+            SESSIONS[session_id]["context"].append({"role": "user", "text": prompt})
+            SESSIONS[session_id]["context"].append({"role": "assistant", "text": output})
+            
+            return jsonify({
+                "result": output,
+                "session_id": session_id
+            })
+        except Exception as e:
+            return jsonify({"error": f"Error: {str(e)}"}), 500
+
+
+def stream_ollama_response(prompt: str, model: str, session_id: str):
+    """Stream Ollama avec mémoire de session."""
+    def generate():
+        try:
+            model_name = model.split(":")[-1]
+            
+            # ✅ RÉCUPÉRER TOUT LE CONTEXTE DE LA SESSION
+            session = SESSIONS.get(session_id, {})
+            context_history = session.get("context", [])
+            
+            # ✅ CONSTRUIRE LE PROMPT AVEC TOUT L'HISTORIQUE
+            full_prompt = ""
+            if context_history:
+                for msg in context_history:
+                    role = "Q" if msg["role"] == "user" else "A"
+                    full_prompt += f"{role}: {msg['text']}\n"
+            
+            full_prompt += f"Q: {prompt}\nA:"
+            
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": model_name,
+                    "prompt": full_prompt,
+                    "stream": True
+                },
+                stream=True,
+                timeout=300
+            )
+            response.raise_for_status()
+            
+            full_response = ""
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        chunk_json = json.loads(line)
+                        text = chunk_json.get("response", "")
+                        if text:
+                            full_response += text
+                            data = json.dumps({'result': text})
+                            yield f"data: {data}\n\n"
+                    except json.JSONDecodeError:
+                        continue
+            
+            # ✅ SAUVEGARDER DANS LA SESSION
+            if session_id in SESSIONS:
+                SESSIONS[session_id]["context"].append({"role": "user", "text": prompt})
+                SESSIONS[session_id]["context"].append({"role": "assistant", "text": full_response})
+            
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
+
+
+# ✅ Endpoint pour récupérer/créer une session
+@app.get("/api/session")
+def get_session():
+    session_id = str(uuid.uuid4())
+    SESSIONS[session_id] = {
+        "context": [],
+        "created": datetime.now().isoformat()
+    }
+    return jsonify({"session_id": session_id})
+
+
+# ✅ Endpoint pour nettoyer les sessions (optionnel)
+@app.delete("/api/session/<session_id>")
+def delete_session(session_id):
+    if session_id in SESSIONS:
+        del SESSIONS[session_id]
+        return jsonify({"status": "deleted"})
+    return jsonify({"error": "Session not found"}), 404
+
+
+
+
     
    # ============ ROUTES MANQUANTES POUR FRONTEND ============
 

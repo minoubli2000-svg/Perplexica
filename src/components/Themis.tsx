@@ -779,95 +779,111 @@ export default function Themis() {
    
 
   
-  const handleAskAI = async () => {
-    if (!question.trim()) {
-      setError('Veuillez entrer une question');
-      return;
-    }
+   const handleAskAI = async () => {
+  if (!question.trim()) {
+    setError('Veuillez entrer une question');
+    return;
+  }
 
-    if (!sessionId) {
-      setError('Création de session en cours...');
-      return;
-    }
+  if (!sessionId) {
+    setError('Création de session en cours...');
+    return;
+  }
 
-    setLoading(true);
-    setError('');
-    let streamedResponse = '';
+  setLoading(true);
+  setError('');
+  let streamedResponse = '';
 
-    try {
-      const currentModel = models[engine];
-      const model = toBackendModel(engine, currentModel);
+  try {
+    const currentModel = models[engine];
+    const model = toBackendModel(engine, currentModel);
 
-      // Ajouter le message utilisateur au chat
-      setMessages(prev => [...prev, { role: 'user', text: question }]);
-      
-      // Ajouter un placeholder pour la réponse IA
-      setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
+    // Ajouter le message utilisateur au chat
+    setMessages(prev => [...prev, { role: 'user', text: question }]);
+    
+    // Ajouter un placeholder pour la réponse IA
+    setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
 
-      // ✅ ENVOYER LA SESSION_ID
-      const res = await fetch(`${API_BASE}/api/ia`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
-        body: JSON.stringify({ 
-          prompt: question,
-          model,
-          session_id: sessionId  // ✅ CRUCIAL
-        }),
-      });
+    // ✅ ENVOYER LA SESSION_ID
+    const res = await fetch(`${API_BASE}/api/ia`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify({ 
+        prompt: question,
+        model,
+        session_id: sessionId
+      }),
+    });
 
-      if (!res.ok) throw new Error('Erreur serveur');
+    if (!res.ok) throw new Error('Erreur serveur');
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('Pas de stream');
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Pas de stream');
 
-      const decoder = new TextDecoder();
+    const decoder = new TextDecoder();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6);
-            if (dataStr === '[DONE]') break;
-            
-            try {
-              const json = JSON.parse(dataStr);
-              if (json.result) {
-                streamedResponse += json.result;
-                
-                // Mettre à jour en temps réel
-                setMessages(prev => {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = {
-                    role: 'assistant',
-                    text: streamedResponse
-                  };
-                  return updated;
-                });
-              }
-            } catch (e) {
-              continue;
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          if (dataStr === '[DONE]') break;
+          
+          try {
+            const json = JSON.parse(dataStr);
+            if (json.result) {
+              streamedResponse += json.result;
+              
+              // Mettre à jour en temps réel
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  role: 'assistant',
+                  text: streamedResponse
+                };
+                return updated;
+              });
             }
+          } catch (e) {
+            continue;
           }
         }
       }
-
-      reader.releaseLock();
-      setQuestion('');
-      setLoading(false);
-
-    } catch (err) {
-      setError((err as Error).message);
-      setLoading(false);
     }
-  };
+
+    reader.releaseLock();
+
+    // ✅ SAUVEGARDER DANS L'HISTORIQUE
+    setHistory(prev => [
+      ...prev,
+      {
+        question: question,
+        messages: [
+          { role: 'user', text: question },
+          { role: 'assistant', text: streamedResponse }
+        ],
+        timestamp: new Date().toISOString()
+      }
+    ]);
+
+    setQuestion('');
+    setLoading(false);
+
+  } catch (err) {
+    setError((err as Error).message);
+    setLoading(false);
+  }
+};
+ 
+
 
   const handleNewConversation = async () => {
     try {

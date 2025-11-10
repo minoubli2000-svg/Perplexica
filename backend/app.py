@@ -7,58 +7,83 @@ import subprocess
 import sys
 import uuid
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from datetime import datetime
 from dotenv import load_dotenv
-load_dotenv()  # lit automatiquement .env à la racine
+import fitz  # PyMuPDF
+import logging
 
-import fitz  # PyMuPDF (optionnel, pour compat scripts)
-
-# Détermine la racine projet (un niveau au-dessus de backend/)
-BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))  # = C:\Users\inoub\Perplexica\backend
-PROJECT_ROOT = os.path.dirname(BACKEND_DIR)  # = C:\Users\inoub\Perplexica\
-
-# Charge file.env depuis racine projet (ton fichier)
+# ✅ 1. DÉFINIR LES CHEMINS D'ABORD
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 ENV_PATH = os.path.join(PROJECT_ROOT, "file.env")
-load_dotenv(ENV_PATH)  # Si .env au lieu de file.env, change à ".env"
 
+# ✅ 2. CHARGER LES VARIABLES D'ENV
+load_dotenv(ENV_PATH)
+
+# ✅ 3. CRÉER L'APP
 app = Flask(__name__)
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    supports_credentials=True,
+    headers="Content-Type, Accept, Authorization"
+)
 
-# Autoriser l’UI (React/Electron) à appeler /api/* pendant le dev
-CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# Dossiers de base (relatifs à racine projet)
+
+
+# ✅ 5. DOSSIERS
 DOCS_PATH = os.path.join(PROJECT_ROOT, "documents")
 INCOMING_PATH = os.path.join(DOCS_PATH, "incoming")
-CORE_EXTRACTION_PATH = os.path.join(PROJECT_ROOT, "core_extraction")  # Relatif à racine (plus flexible)
+CORE_EXTRACTION_PATH = os.path.join(PROJECT_ROOT, "core_extraction")
 os.makedirs(DOCS_PATH, exist_ok=True)
 os.makedirs(INCOMING_PATH, exist_ok=True)
 os.makedirs(CORE_EXTRACTION_PATH, exist_ok=True)
 
-# Profils et catégories attendus par Themis
+# ✅ 6. CONFIG
 PROFILES = ["general", "doctorant", "rapporteur"]
 CATEGORIES = ["extraction", "questions_reponses", "reponse_seule", "production"]
-
-# Extensions supportées (étendu pour extraction)
 ALLOWED_EXTENSIONS = {".pdf", ".txt", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".tiff", ".bmp"}
 
-# Ports depuis file.env (défaut si manquants)
-PERPLEXICA_PORT = int(os.getenv('PERPLEXICA_PORT', 3001))
-BACKEND_PORT = int(os.getenv('BACKEND_PORT', 5000))
+# ✅ 7. PORTS ET CLÉS (APRÈS LOAD_DOTENV)
+PERPLEXICA_PORT = int(os.getenv('PERPLEXICA_PORT', 3005))
+BACKEND_PORT = int(os.getenv('BACKEND_PORT', 3001))
 OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', 11434))
+PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
+print("PERPLEXITY_API_KEY:", PERPLEXITY_API_KEY)
 
+PERPLEXITY_API_URL = PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+
+OLLAMA_URL = os.getenv('OLLAMA_URL', f'http://localhost:{OLLAMA_PORT}')
+PERPLEXICA_URL = os.getenv('PERPLEXICA_URL', f'http://localhost:3005')
+PERPLEXICA_API_URL = "http://localhost:3005/api/search"
+PERPLEXICA_PROVIDERS_URL = "http://localhost:3005/api/providers"
+MODEL_ALIASES = {
+    "mistral": "mistral:latest",
+    "llama3": "llama3:latest",
+    "phi3": "phi3:latest",
+    "codellama": "codellama:latest",
+    "nous-hermes": "nous-hermes:latest"
+}
+
+
+
+
+# ✅ 8. SESSIONS
+SESSIONS = {}
+
+# ✅ 9. FUNCTIONS
 def _profile_dir(model: str) -> str:
-    """
-    Retourne le dossier profil (insensible à la casse), le crée si besoin.
-    """
+    """Retourne le dossier profil (insensible à la casse), le crée si besoin."""
     if not model:
         model = "general"
-    model = model.split(":")[0]  # supporte "prefix:xxx"
-    # Tolérance casse
+    model = model.split(":")[0]
     for candidate in [model, model.lower(), model.upper()]:
         p = os.path.join(DOCS_PATH, candidate)
         if os.path.isdir(p):
             return p
-    # Par défaut créer en minuscules
     p = os.path.join(DOCS_PATH, model.lower())
     os.makedirs(p, exist_ok=True)
     return p
@@ -85,6 +110,143 @@ def log_extraction(message: str):
     log_path = os.path.join(CORE_EXTRACTION_PATH, "core_extraction.log")
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(f"[{datetime.now()}] {message}\n")
+
+PERPLEXITY_ALLOWED_MODELS = [
+    "sonar",
+    "sonar-pro",
+    "sonar-reasoning",
+    "sonar-reasoning-pro",
+    "sonar-deep-research"
+]
+
+def stream_perplexity(prompt: str, model: str):
+    """Stream réel depuis l'API Perplexity avec SSE."""
+    try:
+        if not PERPLEXITY_API_KEY:
+            error_data = json.dumps({'error': 'PERPLEXITY_API_KEY non configurée'})
+            yield f"data: {error_data}\n\n"
+            return
+        
+        payload = {
+            'model': model,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'max_tokens': 2048,
+            'temperature': 0.7,
+            'stream': True  # ✅ ACTIVER LE STREAMING
+        }
+        
+        response = requests.post(
+            PERPLEXITY_API_URL,
+            headers={
+                'Authorization': f'Bearer {PERPLEXITY_API_KEY}',
+                'Content-Type': 'application/json'
+            },
+            json=payload,
+            stream=True,  # ✅ IMPORTANT
+            timeout=60
+        )
+        
+        if response.status_code != 200:
+            error_data = json.dumps({'error': f'perplexity error: {response.text}'})
+            yield f"data: {error_data}\n\n"
+            return
+        
+        # ✅ ITÉRER SUR LES LIGNES SSE
+        for line in response.iter_lines():
+            if line:
+                line = line.decode('utf-8')
+                
+                if line.startswith('data: '):
+                    data_str = line[6:]
+                    
+                    if data_str == '[DONE]':
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                        break
+                    
+                    try:
+                        chunk_json = json.loads(data_str)
+                        
+                        if 'choices' in chunk_json and len(chunk_json['choices']) > 0:
+                            delta = chunk_json['choices'][0].get('delta', {})
+                            content = delta.get('content', '')
+                            
+                            if content:
+                                yield f"data: {json.dumps({'chunk': content})}\n\n"
+                    
+                    except json.JSONDecodeError:
+                        continue
+        
+        yield f"data: {json.dumps({'done': True})}\n\n"
+    
+    except Exception as e:
+        error_data = json.dumps({'error': f'Perplexity error: {str(e)}'})
+        yield f"data: {error_data}\n\n"
+
+
+
+
+
+
+
+def stream_perplexica(prompt: str, model: str):
+    """Stream Perplexica Docker avec gestion de l'historique conversationnel."""
+    try:
+        # Extraction moteur/context/clé
+        model_key = MODEL_ALIASES.get(model, "llama3:latest")
+        # L'historique/“memory” envoyé via POST :
+        history_data = request.json.get("history", [])
+        payload = {
+            "chatModel": {
+                "providerId": "c4dc4b0c-0a7a-41bb-a232-cdc9140dba18",
+                "key": model_key
+            },
+            "embeddingModel": {
+                "providerId": "c4dc4b0c-0a7a-41bb-a232-cdc9140dba18",
+                "key": "mxbai-embed-large:latest"
+            },
+            "focusMode": "webSearch",
+            "query": prompt,
+            "optimizationMode": "speed",
+            "systemInstructions": "Réponds simplement.",
+            "stream": True,
+            "history": history_data      # <--- la clé qui change tout !
+        }
+        response = requests.post(
+            f'{PERPLEXICA_URL}/api/search',
+            json=payload,
+            stream=True,
+            timeout=60,
+            headers={"Content-Type": "application/json"}
+        )
+        if response.status_code != 200:
+            error_data = json.dumps({'error': f'Perplexica error: {response.status_code}'})
+            yield f"data: {error_data}\n\n"
+            return
+
+        for line in response.iter_lines():
+            if line:
+                try:
+                    obj = json.loads(line.decode('utf-8'))
+                    if obj.get("type") == "init":
+                        continue
+                    if obj.get("type") == "sources":
+                        yield f'data: {json.dumps({"type":"sources","data":obj["data"]})}\n\n'
+                        continue
+                    if obj.get("type") == "response" and isinstance(obj.get("data"), str):
+                        yield f'data: {json.dumps({"type":"response","data":obj["data"]})}\n\n'
+                        continue
+                    if obj.get("type") == "done":
+                        yield "data: [DONE]\n\n"
+                        continue
+                except Exception:
+                    pass
+        yield "data: [DONE]\n\n"
+    except Exception as e:
+        error_data = json.dumps({'error': f'Perplexica error: {str(e)}'})
+        yield f"data: {error_data}\n\n"
+
+
+
 
 # ------------------ BIBLIOTHÈQUE UNIQUE (INCHANGÉE) ------------------
 @app.get("/api/library/structure")
@@ -295,51 +457,89 @@ import uuid
 
 # ✅ Stocker les sessions avec leur contexte
 SESSIONS = {}
-
 @app.post("/api/ia")
 def api_ia():
     data = request.get_json(force=True)
     prompt = data.get("prompt", "")
-    model = data.get("model", "ollama:llama3")
-    session_id = data.get("session_id")  # ✅ NOUVEAU
-    
-    if not session_id:
-        session_id = str(uuid.uuid4())
-    
+    engine = data.get("engine", "ollama")
+    model = data.get("model", "llama3")
+    session_id = data.get("session_id") or str(uuid.uuid4())
+
     if not prompt.strip():
         return jsonify({"error": "prompt vide"}), 400
 
-    # ✅ Récupérer ou créer la session
-    if session_id not in SESSIONS:
-        SESSIONS[session_id] = {
-            "context": [],
-            "created": datetime.now().isoformat()
-        }
-
-    if request.headers.get('Accept') == 'text/event-stream':
+    # Dispatch direct, PAS yield from !
+    if engine == "perplexity":
+        return stream_perplexity_response(prompt, model, session_id)
+    elif engine == "perplexica":
+        return stream_perplexica_response(prompt, model, session_id)
+    else:  # default to ollama
         return stream_ollama_response(prompt, model, session_id)
-    else:
+
+
+def stream_perplexica_response(prompt: str, model: str, session_id: str):
+    def generate():
         try:
-            model_name = model.split(":")[-1]
-            result = subprocess.run(
-                ['ollama', 'run', model_name, prompt],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=300
+            model_key = MODEL_ALIASES.get(model, model)
+            payload = {
+                "chatModel": {
+                    "providerId": "c4dc4b0c-0a7a-41bb-a232-cdc9140dba18",
+                    "key": model_key
+                },
+                "embeddingModel": {
+                    "providerId": "c4dc4b0c-0a7a-41bb-a232-cdc9140dba18",
+                    "key": "mxbai-embed-large:latest"
+                },
+                "focusMode": "webSearch",
+                "query": prompt,
+                "optimizationMode": "speed",
+                "systemInstructions": "Réponds simplement.",
+                "stream": True,
+                "history": []
+            }
+            headers = {'Content-Type': 'application/json'}
+            print('[DEBUG FRONT MODEL]', model)
+            print('[DEBUG BACKEND KEY]', model_key)
+            print('[DEBUG PAYLOAD]', payload)
+            response = requests.post(
+                PERPLEXICA_API_URL,
+                headers=headers,
+                json=payload,
+                stream=True,
+                timeout=60
             )
-            output = result.stdout.strip()
-            
-            # ✅ Sauvegarder dans le contexte de session
-            SESSIONS[session_id]["context"].append({"role": "user", "text": prompt})
-            SESSIONS[session_id]["context"].append({"role": "assistant", "text": output})
-            
-            return jsonify({
-                "result": output,
-                "session_id": session_id
-            })
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        obj = json.loads(line.decode('utf-8'))
+                        # Renvoie chaque type selon le streaming Perplexica officiel
+                        if obj.get("type") == "init":
+                            continue
+                        if obj.get("type") == "sources":
+                            yield f'data: {json.dumps({"type":"sources","data":obj["data"]})}\n\n'
+                            continue
+                        if obj.get("type") == "response" and isinstance(obj.get("data"), str):
+                            yield f'data: {json.dumps({"type":"response","data":obj["data"]})}\n\n'
+                            continue
+                        if obj.get("type") == "done":
+                            yield "data: [DONE]\n\n"
+                            continue
+                    except Exception:
+                        continue
+            yield "data: [DONE]\n\n"
         except Exception as e:
-            return jsonify({"error": f"Error: {str(e)}"}), 500
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
 
 
 def stream_ollama_response(prompt: str, model: str, session_id: str):
@@ -406,8 +606,78 @@ def stream_ollama_response(prompt: str, model: str, session_id: str):
         }
     )
 
+def stream_perplexity_response(prompt: str, model: str, session_id: str):
+    def generate():
+        try:
+            session = SESSIONS.get(session_id, {})
+            context_history = session.get("context", [])
 
-# ✅ Endpoint pour récupérer/créer une session
+            # Construire prompt complet si besoin
+            full_prompt = prompt
+
+            headers = {
+                'Authorization': f'Bearer {PERPLEXITY_API_KEY}',
+                'Content-Type': 'application/json'
+            }
+
+            payload = {
+                'model': model.split(":")[-1],
+                'messages': [{'role': 'user', 'content': full_prompt}],
+                'max_tokens': 2048,
+                'temperature': 0.7,
+                'stream': True
+            }
+
+            response = requests.post(
+                PERPLEXITY_API_URL,
+                headers=headers,
+                json=payload,
+                stream=True,
+                timeout=60
+            )
+            response.raise_for_status()
+
+            full_response = ""
+            for line in response.iter_lines():
+                if line:
+                    line = line.decode('utf-8')
+                    if line.startswith('data: '):
+                        try:
+                            json_data = json.loads(line[6:])
+                            choices = json_data.get('choices', [])
+                            if choices:
+                                delta = choices[0].get('delta', {})
+                                content = delta.get('content', '')
+                                if content:
+                                    full_response += content
+                                    data = json.dumps({'result': content})
+                                    yield f"data: {data}\n\n"
+                        except json.JSONDecodeError:
+                            continue
+
+            if session_id in SESSIONS:
+                SESSIONS[session_id]["context"].append({"role": "user", "text": prompt})
+                SESSIONS[session_id]["context"].append({"role": "assistant", "text": full_response})
+
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
+
+
+
+
+
 @app.get("/api/session")
 def get_session():
     session_id = str(uuid.uuid4())
@@ -418,7 +688,6 @@ def get_session():
     return jsonify({"session_id": session_id})
 
 
-# ✅ Endpoint pour nettoyer les sessions (optionnel)
 @app.delete("/api/session/<session_id>")
 def delete_session(session_id):
     if session_id in SESSIONS:
@@ -427,10 +696,64 @@ def delete_session(session_id):
     return jsonify({"error": "Session not found"}), 404
 
 
+@app.route('/api/ia', methods=['POST'])
+def api_ia_stream():
+    data = request.get_json() or {}
+    engine = data.get('engine', 'ollama')
+    model = data.get('model', 'llama3')
+    prompt = data.get('prompt', '')
+    session_id = data.get('session_id') or str(uuid.uuid4())
+
+    if not prompt:
+        return jsonify({"error": "prompt requis"}), 400
+
+    def generate():
+        try:
+            if engine == 'perplexity':
+                yield from stream_perplexity_response(prompt, model, session_id)
+            elif engine == 'ollama':
+                yield from stream_ollama(prompt, model, session_id)
+            elif engine == 'perplexica':
+                yield from stream_perplexica_response(prompt, model, session_id)
+            else:
+                error_data = json.dumps({'error': 'Engine non supporté'})
+                yield f"data: {error_data}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            error_data = json.dumps({'error': str(e)})
+            yield f"data: {error_data}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+        'Connection': 'keep-alive'
+    })
 
 
-    
-   # ============ ROUTES MANQUANTES POUR FRONTEND ============
+# Healthcheck route...
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    health = {
+        'perplexity': 'ok' if PERPLEXITY_API_KEY else 'no-key',
+        'ollama': 'checking',
+        'perplexica': 'checking'
+    }
+
+    try:
+        requests.get(f'{OLLAMA_URL}/api/tags', timeout=2)
+        health['ollama'] = 'ok'
+    except:
+        health['ollama'] = 'down'
+
+    try:
+        requests.get(f'{PERPLEXICA_URL}', timeout=2)
+        health['perplexica'] = 'ok'
+    except:
+        health['perplexica'] = 'down'
+
+    return jsonify(health)
+
+
 
 # 1. GET /api/documents - Liste tous les documents
 @app.get("/api/documents")
@@ -454,7 +777,6 @@ def api_get_documents():
                         })
     return jsonify({"documents": all_docs})
 
-
 # 2. POST /api/ask - Alias pour /api/ia
 @app.post("/api/ask")
 def api_ask():
@@ -462,16 +784,15 @@ def api_ask():
     data = request.get_json(silent=True) or {}
     question = data.get("question") or data.get("prompt")
     document_id = data.get("documentId")  # Optionnel
-    
+
     # Réutiliser /api/ia
     if not question:
         return jsonify({"error": "question requise"}), 400
-    
+
     # Appeler la logique d'IA existante
     data["prompt"] = question
     request_data = data
     return api_ia()
-
 
 # 3. GET /api/documents/{id}/extract - Extraction par ID document
 @app.get("/api/documents/<path:doc_id>/extract")
@@ -481,20 +802,19 @@ def api_get_extracted(doc_id):
     parts = doc_id.split("/")
     if len(parts) < 3:
         return jsonify({"error": "ID invalide (format: profile/category/filename)"}), 400
-    
-    prof, cat, fname = parts, parts, "/".join(parts[2:])
+
+    prof, cat, fname = parts[0], parts[1], "/".join(parts[2:])
     fpath = os.path.join(_profile_dir(prof), cat, fname)
-    
+
     if not os.path.isfile(fpath):
         return jsonify({"error": "Document introuvable"}), 404
-    
+
     # Utiliser la fonction d'extraction existante
     result = api_documents_extract_internal(filename=fname, file_path=fpath)
     if "error" in result:
         return jsonify(result), 500
-    
-    return result
 
+    return result
 
 # 4. POST /api/export - Export conversation en PDF
 @app.post("/api/export")
@@ -503,21 +823,21 @@ def api_export():
     data = request.get_json(silent=True) or {}
     chat = data.get("chat", [])  # Liste de messages
     document_id = data.get("documentId")
-    
+
     try:
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
         import io
-        
+
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=A4)
         y = 800
-        
+
         # Titre
         c.setFont("Helvetica-Bold", 16)
         c.drawString(50, y, "Export Conversation Themis")
         y -= 40
-        
+
         # Messages
         c.setFont("Helvetica", 10)
         for msg in chat:
@@ -528,22 +848,21 @@ def api_export():
             if y < 50:
                 c.showPage()
                 y = 800
-        
+
         c.save()
         buffer.seek(0)
-        
+
         return buffer.getvalue(), 200, {
             "Content-Type": "application/pdf",
             "Content-Disposition": "attachment; filename=export.pdf"
         }
-    
+
     except ImportError:
         return jsonify({
             "error": "reportlab non installé. Exécute: pip install reportlab"
         }), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 # 5. DELETE /api/documents/{id} - Suppression par ID
 @app.delete("/api/documents/<path:doc_id>")
@@ -552,32 +871,26 @@ def api_delete_document(doc_id):
     parts = doc_id.split("/")
     if len(parts) < 3:
         return jsonify({"error": "ID invalide"}), 400
-    
-    prof, cat, fname = parts, parts, "/".join(parts[2:])
+
+    prof, cat, fname = parts[0], parts[1], "/".join(parts[2:])
     fpath = os.path.join(_profile_dir(prof), cat, fname)
-    
+
     if not os.path.isfile(fpath):
         return jsonify({"error": "Document introuvable"}), 404
-    
+
     try:
         os.remove(fpath)
         return jsonify({"success": True, "deleted": doc_id})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
- 
+        return jsonify({"error": str(e)})
 
-# ------------------ MAIN ------------------
+    
+  # puis on ajoute le bloc main, SANS indentation :
 if __name__ == "__main__":
-    # Port depuis file.env (BACKEND_PORT=5000 ou PERPLEXICA_PORT=3001)
-    port = int(os.getenv('BACKEND_PORT', os.getenv('PERPLEXICA_PORT', 5000)))
-    print(f"=== Themis Backend Réel ===")
-    print(f"Port: {port} | Ollama: {OLLAMA_PORT} | Perplexity clé: {'Chargée' if os.getenv('PERPLEXITY_API_KEY') else 'Manquante'}")
+    # Port depuis .env (BACKEND_PORT ou PERPLEXICA_PORT), fallback 3001
+    port = int(os.getenv('BACKEND_PORT', os.getenv('PERPLEXICA_PORT', 3005)))
+    print("=== Themis Backend Streaming ===")
+    print(f"Port: {port} | Ollama: {OLLAMA_PORT} | perplexity clé: {'Chargée' if PERPLEXITY_API_KEY else 'Manquante'}")
     print(f"Dossiers: Docs={DOCS_PATH} | Extraction={CORE_EXTRACTION_PATH}")
-    app.run(host="0.0.0.0", port=port, debug=True)
-
-
-
-
-
-
-
+    app.run(host="0.0.0.0", port=3001, debug=True) 
+ 

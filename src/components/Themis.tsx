@@ -18,36 +18,48 @@ import { extractTextAndPreview } from '../services/tesseract'
 
 // ===== CONFIGURATIONS =====
 
-
-
 const ENGINES = [
-  { value: 'perplexity', label: 'Perplexity' },
-  { value: 'perplexica', label: 'Perplexica' },
+  { value: 'perplexity', label: 'perplexity' },
+  { value: 'gpt', label: 'OpenAI GPT' },
   { value: 'ollama', label: 'Ollama' },
-  { value: 'gpt', label: 'GPT' },
+  { value: 'perplexica', label: 'Perplexica' },
 ];
 
 const MODEL_OPTIONS = {
   perplexity: [
     { value: 'sonar', label: 'Sonar' },
-    { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-    { value: 'claude-sonnet-4-5-pensee', label: 'Claude Sonnet 4.5 Pensée' },
-    { value: 'claude-opus-4-1-reflexion', label: 'Réflexion Claude Opus 4.1' },
-    { value: 'gemini-2-5-pro', label: 'Gemini 2.5 Pro' },
-    { value: 'gpt-5', label: 'GPT-5' },
-  ],
-  perplexica: [
-    { value: 'default', label: 'Default' },
-    { value: 'llama3', label: 'Llama 3' },
-  ],
-  ollama: [
-    { value: 'llama3', label: 'Llama 3' },
-    { value: 'mistral', label: 'Mistral' },
+    { value: 'sonar-pro', label: 'Sonar Pro' },
+    { value: 'sonar-reasoning', label: 'Sonar Reasoning' },
+    { value: 'sonar-reasoning-pro', label: 'Sonar Reasoning Pro' },
+    { value: 'sonar-deep-research', label: 'Sonar Deep Research' },
   ],
   gpt: [
-    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+    { value: 'gpt-3.5-turbo', label: 'GPT 3.5 Turbo' },
+    { value: 'gpt-4', label: 'GPT-4' },
+  ],
+  ollama: [
+    { value: 'llama3', label: 'LLaMA 3' },
+    { value: 'mistral', label: 'Mistral' },
+    { value: 'codellama', label: 'CodeLLaMA' },
+    { value: 'nous-hermes', label: 'Nous Hermes' },
+    { value: 'phi3', label: 'Phi 3' },
+  ],
+  perplexica: [
+    { value: 'llama3', label: 'LLaMA 3' },
+    { value: 'mistral', label: 'Mistral' },
+    { value: 'phi3', label: 'Phi 3' },
+    { value: 'codellama', label: 'CodeLLaMA' },
+    { value: 'nous-hermes', label: 'Nous Hermes' },
   ],
 };
+
+
+  
+
+
+ 
+
+
 
 const ROLES = [
   { value: 'general', label: 'Général' },
@@ -59,9 +71,9 @@ const ROLES = [
 const toBackendModel = (engine: string, modelValue: string): string => {
   switch (engine) {
     case 'perplexity':
-      return `perplexity:${modelValue || 'sonar'}`;
+      return `perplexity:${modelValue || 'sonar-pro'}`;     // modèle officiel par défaut
     case 'perplexica':
-      return `perplexica:${modelValue || 'default'}`;
+      return modelValue || 'mistral'; 
     case 'ollama':
       return `ollama:${modelValue || 'llama3'}`;
     case 'gpt':
@@ -70,6 +82,7 @@ const toBackendModel = (engine: string, modelValue: string): string => {
       return '';
   }
 };
+
 
 const modelFamily = (modelString: string): string => {
   if (!modelString) return 'general';
@@ -81,17 +94,23 @@ const modelFamily = (modelString: string): string => {
 
 
 
+
 // ===== SERVICES API =====
 const API_BASE = 'http://localhost:3001';
 
-const askIA = async (prompt: string, model: string, onChunk: (chunk: { done: boolean; text: string }) => void) => {
+const askIA = async (
+  prompt: string,
+  model: string,
+  engine: string,
+  onChunk: (chunk: { done: boolean; text: string }) => void
+) => {
   const res = await fetch(`${API_BASE}/api/ia`, {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
-      'Accept': 'text/event-stream' // Demander le streaming
+      'Accept': 'text/event-stream'
     },
-    body: JSON.stringify({ prompt, model }),
+    body: JSON.stringify({ prompt, model, engine }),
   });
 
   if (!res.ok) {
@@ -99,7 +118,6 @@ const askIA = async (prompt: string, model: string, onChunk: (chunk: { done: boo
     throw new Error(errorData.error || res.statusText || 'Erreur IA');
   }
 
-  // Vérifier si c'est du SSE (streaming)
   if (res.headers.get('content-type')?.includes('text/event-stream')) {
     const reader = res.body?.getReader();
     if (!reader) throw new Error('Pas de body stream disponible');
@@ -128,8 +146,12 @@ const askIA = async (prompt: string, model: string, onChunk: (chunk: { done: boo
                 fullResponse += json.result;
                 onChunk?.({ done: false, text: json.result });
               }
+              if (json.chunk) {
+                fullResponse += json.chunk + " ";
+                onChunk?.({ done: false, text: json.chunk });
+              }
             } catch (e) {
-              // Ignore les lignes non-JSON
+              // Ignore non-JSON
             }
           }
         }
@@ -138,17 +160,20 @@ const askIA = async (prompt: string, model: string, onChunk: (chunk: { done: boo
       reader.releaseLock();
     }
 
-    return { result: fullResponse };
+    return { result: fullResponse.trim() };
   } else {
     // Fallback : réponse JSON classique
     const json = await res.json();
-    if (!json.result || !String(json.result).trim()) {
+    const text = json.result || json.chunk || "";
+    if (!text.trim()) {
       throw new Error('Réponse IA vide');
     }
-    onChunk?.({ done: true, text: json.result });
-    return json;
+    onChunk?.({ done: true, text });
+    return { result: text.trim() };
   }
 };
+
+
 
 // ===== Handler IA avec streaming =====
 const handleAskAI = async () => {
@@ -165,29 +190,28 @@ const handleAskAI = async () => {
     const currentModel = models[engine];
     const model = toBackendModel(engine, currentModel);
 
-    // ✅ AJOUTER TOUT L'HISTORIQUE DE MESSAGES (contexte chat)
-    const fullMessages = [
-      ...messages,
-      { role: 'user', text: question }
-    ];
+    setMessages(prev => [
+      ...prev,
+      { role: 'user', text: question },
+      { role: 'assistant', text: '' }
+    ]);
 
-    // Ajouter le message utilisateur au chat
-    setMessages(prev => [...prev, { role: 'user', text: question }]);
-    
-    // Ajouter un placeholder pour la réponse IA
-    setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
+    // Détermination dynamique de la clé : messages ou history
+    const contextKey = engine === "perplexica" ? "history" : "messages";
+    const contextPayload = { [contextKey]: messages };
 
-    // ✅ ENVOYER LES MESSAGES AVEC LE CONTEXTE
+    // requête IA
     const res = await fetch(`${API_BASE}/api/ia`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream'
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         prompt: question,
         model,
-        messages: fullMessages  // ✅ NOUVEAU : Passer tous les messages
+        engine,
+        ...contextPayload
       }),
     });
 
@@ -195,39 +219,55 @@ const handleAskAI = async () => {
 
     const reader = res.body?.getReader();
     if (!reader) throw new Error('Pas de stream');
+    const decoder = new TextDecoder("utf-8");
 
-    const decoder = new TextDecoder();
-
+    let doneFlag = false;
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
-
+      if (done || doneFlag) break;
       const chunk = decoder.decode(value, { stream: true });
       const lines = chunk.split('\n');
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
-          if (dataStr === '[DONE]') break;
-          
+          const dataStr = line.slice(6).trim();
+          if (dataStr === '[DONE]') {
+            doneFlag = true;
+            break;
+          }
           try {
             const json = JSON.parse(dataStr);
-            if (json.result) {
-              streamedResponse += json.result;
-              
-              // Mettre à jour en temps réel
+
+            // ---- FILTRAGE STRICT -----
+            if (json.type === "init" || json.type === "sources") {
+              continue; // on ignore totalement ces chunks !
+            }
+
+            if (
+              json.result || json.chunk ||
+              json.message || json.content ||
+              (json.data && typeof json.data === "string")
+            ) {
+              let part =
+                json.result ||
+                json.chunk ||
+                json.message ||
+                json.content ||
+                (typeof json.data === "string" ? json.data : "");
+
+              // Par sécurité : tout objet restant → string
+              if (typeof part !== "string") part = JSON.stringify(part);
+              streamedResponse += part;
               setMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
-                  role: 'assistant',
-                  text: streamedResponse
+                  ...updated[updated.length - 1],
+                  text: streamedResponse.trim()
                 };
                 return updated;
               });
             }
-          } catch (e) {
-            continue;
-          }
+          } catch (e) { continue; }
         }
       }
     }
@@ -236,7 +276,6 @@ const handleAskAI = async () => {
     setQuestion('');
     setLoading(false);
 
-    // ✅ Sauvegarder dans l'historique
     setHistory(prev => [
       ...prev,
       {
@@ -244,7 +283,7 @@ const handleAskAI = async () => {
         messages: [
           ...messages,
           { role: 'user', text: question },
-          { role: 'assistant', text: streamedResponse }
+          { role: 'assistant', text: streamedResponse.trim() }
         ],
         model,
         timestamp: new Date().toISOString()
@@ -256,6 +295,8 @@ const handleAskAI = async () => {
     setLoading(false);
   }
 };
+
+
 
 
 
@@ -637,21 +678,31 @@ export default function Themis() {
   const [libraryStructure, setLibraryStructure] = useState(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   
-  
+ 
+
   const fileExtractInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [engine, setEngine] = useState('perplexity');
 
+  const handleEngineChange = (next) => {
+  setEngine(next); // next sera toujours 'perplexity', 'gpt' etc !
+  if (!models[next]) setModels(prev => ({
+    ...prev,
+    [next]: (MODEL_OPTIONS[next]?.[0]?.value || '')
+  }));
+  };  
   
 
   const [role, setRole] = useState('general');
   const [onlineMode, setOnlineMode] = useState('en_ligne');
-  const [engine, setEngine] = useState('perplexity');
+  
   const [models, setModels] = useState({
-    perplexity: MODEL_OPTIONS.perplexity[0].value,
-    perplexica: MODEL_OPTIONS.perplexica[0].value,
-    ollama: MODEL_OPTIONS.ollama[0].value,
-    gpt: MODEL_OPTIONS.gpt[0].value,
+  perplexity: MODEL_OPTIONS.perplexity.length > 0 ? MODEL_OPTIONS.perplexity[0].value : '',
+  perplexica: MODEL_OPTIONS.perplexica && MODEL_OPTIONS.perplexica.length > 0 ? MODEL_OPTIONS.perplexica[0].value : '',
+  ollama: MODEL_OPTIONS.ollama && MODEL_OPTIONS.ollama.length > 0 ? MODEL_OPTIONS.ollama[0].value : '',
+  gpt: MODEL_OPTIONS.gpt && MODEL_OPTIONS.gpt.length > 0 ? MODEL_OPTIONS.gpt[0].value : '',
   });
+
 
   
   const [messages, setMessages] = useState(() => {
@@ -714,7 +765,11 @@ export default function Themis() {
 
 
 
- 
+  
+  
+  
+  
+
 
 
 
@@ -775,113 +830,172 @@ export default function Themis() {
     initSession();
   }, []);  // ← S'exécute une fois au montage
 
-    
-   
+  // Utility pour corriger les textes collés sans espaces
+function addSpacesToColleText(text) {
+  return text
+    .replace(/([a-zàâçéèêëîïôûùüÿñæœ])([A-ZÀ-ÖØ-öø-ÿ])/g, '$1 $2')
+    .replace(/([,.;:!?])([^\s])/g, '$1 $2')
+    .replace(/([0-9])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2')
+    .replace(/([a-zA-ZÀ-ÖØ-öø-ÿ])([0-9])/g, '$1 $2')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
-  
-   const handleAskAI = async () => {
+// Helper pour le contexte multi-backend
+const getContextPayload = (engine, messages) => {
+  if (engine === "perplexity" || engine === "gpt") {
+    return { messages: messages.map(({ role, text }) => ({ role, content: text })) };
+  }
+  if (engine === "perplexica") {
+    return { history: messages.map(({ role, text }) => ({ role, content: text })) };
+  }
+  if (engine === "ollama") {
+    return { messages };
+  }
+  return {};
+};
+
+// Handler IA universel
+const handleAskAI = async () => {
   if (!question.trim()) {
     setError('Veuillez entrer une question');
     return;
   }
-
   if (!sessionId) {
     setError('Création de session en cours...');
     return;
   }
-
   setLoading(true);
   setError('');
-  let streamedResponse = '';
-
   try {
-    const currentModel = models[engine];
-    const model = toBackendModel(engine, currentModel);
+    setMessages(prev => [
+      ...prev,
+      { role: 'user', text: question },
+      { role: 'assistant', text: '' }
+    ]);
 
-    // Ajouter le message utilisateur au chat
-    setMessages(prev => [...prev, { role: 'user', text: question }]);
-    
-    // Ajouter un placeholder pour la réponse IA
-    setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
+    // Crée le bon payload selon moteur
+    const contextPayload = getContextPayload(engine, messages);
 
-    // ✅ ENVOYER LA SESSION_ID
     const res = await fetch(`${API_BASE}/api/ia`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream'
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         prompt: question,
-        model,
-        session_id: sessionId
+        model: toBackendModel(engine, models[engine]),
+        engine,
+        session_id: sessionId,
+        ...contextPayload
       }),
     });
 
-    if (!res.ok) throw new Error('Erreur serveur');
+    if (!res.ok || !res.body) throw new Error('Erreur réseau ou stream indisponible');
 
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('Pas de stream');
-
-    const decoder = new TextDecoder();
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let streamedResponse = '';
+    let doneFlag = false;
 
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
+      const { value, done } = await reader.read();
+      if (done || doneFlag) break;
       const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
-          if (dataStr === '[DONE]') break;
-          
+      chunk.split('\n').forEach(line => {
+        if (line.startsWith("data:")) {
+          const content = line.replace("data:", "").trim();
+          if (content === "[DONE]") {
+            doneFlag = true;
+            return;
+          }
           try {
-            const json = JSON.parse(dataStr);
-            if (json.result) {
-              streamedResponse += json.result;
-              
-              // Mettre à jour en temps réel
+            const json = JSON.parse(content);
+            if (json.type && ["init", "sources", "done"].includes(json.type)) return;
+            let part = json.data || json.result || json.chunk || json.message || json.content || "";
+            if (typeof part === "string" && part) streamedResponse += part;
+
+            if (streamedResponse.trim()) {
+              let clean = streamedResponse;
+              const spaceRatio = (clean.match(/\s/g) || []).length / clean.length;
+              if (spaceRatio < 0.08) clean = addSpacesToColleText(clean);
+
               setMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
-                  role: 'assistant',
-                  text: streamedResponse
+                  ...updated[updated.length - 1],
+                  text: clean
                 };
                 return updated;
               });
             }
-          } catch (e) {
-            continue;
-          }
+            if (json.error) setError(json.error);
+          } catch (e) {}
         }
-      }
+      });
     }
 
     reader.releaseLock();
 
-    // ✅ SAUVEGARDER DANS L'HISTORIQUE
     setHistory(prev => [
       ...prev,
       {
-        question: question,
+        question,
         messages: [
           { role: 'user', text: question },
-          { role: 'assistant', text: streamedResponse }
+          { role: 'assistant', text: streamedResponse.trim() }
         ],
         timestamp: new Date().toISOString()
       }
     ]);
-
     setQuestion('');
     setLoading(false);
 
   } catch (err) {
-    setError((err as Error).message);
+    setError((err).message);
     setLoading(false);
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+
+
  
 
 
@@ -973,10 +1087,7 @@ export default function Themis() {
 };
 
 
-  const handleEngineChange = (next) => {
-    setEngine(next);
-    if (!models[next]) setModels(prev => ({ ...prev, [next]: (MODEL_OPTIONS[next]?.[0]?.value || '') }));
-  };
+  
 
   const safeJson = async res => {
   const contentType = res.headers.get("content-type");
@@ -1277,7 +1388,8 @@ const handleExportPDF = async () => {
   }
 };
 
-// ✅ AJOUTER LE RETURN ICI (pas après les lignes orphelines!)
+{console.log('DEBUG ENGINE STATE VAL:', engine)}
+
 
 return (
   <>
@@ -1371,39 +1483,39 @@ return (
 </div>
 <div>
   <label className="text-xs font-semibold mr-2">Moteur :</label>
-  <select
-    value={engine}
-    onChange={e => handleEngineChange(e.target.value)}
-    className="border px-2 py-1"
-  >
-                {ENGINES
-                  .filter(e =>
-                    onlineMode === 'en_ligne'
-                      ? ['perplexity', 'gpt'].includes(e.value)
-                      : ['ollama', 'perplexica'].includes(e.value)
-                  )
-                  .map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-              </select>
+<select
+  value={engine}
+  onChange={e => handleEngineChange(e.target.value)}
+  className="border px-2 py-1"
+>
+  {ENGINES
+    .filter(e =>
+      onlineMode === 'en_ligne'
+        ? ['perplexity', 'gpt'].includes(e.value)
+        : ['ollama', 'perplexica'].includes(e.value)
+    )
+    .map(opt => (
+      <option key={opt.value} value={opt.value}>
+        {opt.label}
+      </option>
+    ))
+  }
+</select>
+
+
             </div>
             <div>
               <label className="text-xs font-semibold mr-2">Modèle :</label>
               <select
-                value={models[engine]}
-                onChange={e =>
-                  setModels(prev => ({ ...prev, [engine]: e.target.value }))
-                }
-                className="border px-2 py-1"
-              >
-                {MODEL_OPTIONS[engine].map(m => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
+  value={models[engine]}
+  onChange={e => setModels(prev => ({ ...prev, [engine]: e.target.value }))}
+  className="border px-2 py-1"
+>
+  {MODEL_OPTIONS[engine].map(m => (
+    <option key={m.value} value={m.value}>{m.label}</option>
+  ))}
+</select>
+
             </div>
             <ThemisButton
               size="xs"

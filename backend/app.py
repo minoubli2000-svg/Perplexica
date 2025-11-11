@@ -128,12 +128,13 @@ def stream_perplexity(prompt: str, model: str):
             return
         
         payload = {
-            'model': model,
-            'messages': [{'role': 'user', 'content': prompt}],
-            'max_tokens': 2048,
-            'temperature': 0.7,
-            'stream': True  # ✅ ACTIVER LE STREAMING
-        }
+    'model': model,
+    'messages': SESSIONS[session_id]["context"],  # <= tout l'historique Q/R
+    'max_tokens': 2048,
+    'temperature': 0.7,
+    'stream': True
+}
+
         
         response = requests.post(
             PERPLEXITY_API_URL,
@@ -188,62 +189,6 @@ def stream_perplexity(prompt: str, model: str):
 
 
 
-def stream_perplexica(prompt: str, model: str):
-    """Stream Perplexica Docker avec gestion de l'historique conversationnel."""
-    try:
-        # Extraction moteur/context/clé
-        model_key = MODEL_ALIASES.get(model, "llama3:latest")
-        # L'historique/“memory” envoyé via POST :
-        history_data = request.json.get("history", [])
-        payload = {
-            "chatModel": {
-                "providerId": "c4dc4b0c-0a7a-41bb-a232-cdc9140dba18",
-                "key": model_key
-            },
-            "embeddingModel": {
-                "providerId": "c4dc4b0c-0a7a-41bb-a232-cdc9140dba18",
-                "key": "mxbai-embed-large:latest"
-            },
-            "focusMode": "webSearch",
-            "query": prompt,
-            "optimizationMode": "speed",
-            "systemInstructions": "Réponds simplement.",
-            "stream": True,
-            "history": history_data      # <--- la clé qui change tout !
-        }
-        response = requests.post(
-            f'{PERPLEXICA_URL}/api/search',
-            json=payload,
-            stream=True,
-            timeout=60,
-            headers={"Content-Type": "application/json"}
-        )
-        if response.status_code != 200:
-            error_data = json.dumps({'error': f'Perplexica error: {response.status_code}'})
-            yield f"data: {error_data}\n\n"
-            return
-
-        for line in response.iter_lines():
-            if line:
-                try:
-                    obj = json.loads(line.decode('utf-8'))
-                    if obj.get("type") == "init":
-                        continue
-                    if obj.get("type") == "sources":
-                        yield f'data: {json.dumps({"type":"sources","data":obj["data"]})}\n\n'
-                        continue
-                    if obj.get("type") == "response" and isinstance(obj.get("data"), str):
-                        yield f'data: {json.dumps({"type":"response","data":obj["data"]})}\n\n'
-                        continue
-                    if obj.get("type") == "done":
-                        yield "data: [DONE]\n\n"
-                        continue
-                except Exception:
-                    pass
-        yield "data: [DONE]\n\n"
-    except Exception as e:
-        error_data = json.dumps({'error': f'Perplexica error: {str(e)}'})
-        yield f"data: {error_data}\n\n"
 
 
 
@@ -452,11 +397,11 @@ def api_documents_download():
 
 # ------------------ APIs IA (OLLAMA LOCAL RÉEL + PERPLEXITY FALLBACK) ------------------
 
-
 import uuid
 
 # ✅ Stocker les sessions avec leur contexte
 SESSIONS = {}
+
 @app.post("/api/ia")
 def api_ia():
     data = request.get_json(force=True)
@@ -468,7 +413,10 @@ def api_ia():
     if not prompt.strip():
         return jsonify({"error": "prompt vide"}), 400
 
-    # Dispatch direct, PAS yield from !
+    # ✅ Initialisation du contexte de session pour TOUS les moteurs
+    session = SESSIONS.setdefault(session_id, {"context": []})
+
+    # Dispatch direct
     if engine == "perplexity":
         return stream_perplexity_response(prompt, model, session_id)
     elif engine == "perplexica":
@@ -476,10 +424,23 @@ def api_ia():
     else:  # default to ollama
         return stream_ollama_response(prompt, model, session_id)
 
-
 def stream_perplexica_response(prompt: str, model: str, session_id: str):
     def generate():
         try:
+            # 1. Récupérer ou initialiser la session/context
+            session = SESSIONS.setdefault(session_id, {"context": []})
+            context_history = session["context"]
+
+            # 2. Ajouter la question utilisateur à l’historique
+            context_history.append({"role": "user", "content": prompt})
+
+            # 3. Concaténer tout le contexte en mode Q/A
+            full_prompt = ""
+            for item in context_history[-5:]:  # Prends les 5 derniers tours (modifiable)
+                role = "Q" if item["role"] == "user" else "A"
+                full_prompt += f"{role}: {item['content']}\n"
+            full_prompt += f"Q: {prompt}\nA:"
+
             model_key = MODEL_ALIASES.get(model, model)
             payload = {
                 "chatModel": {
@@ -491,35 +452,38 @@ def stream_perplexica_response(prompt: str, model: str, session_id: str):
                     "key": "mxbai-embed-large:latest"
                 },
                 "focusMode": "webSearch",
-                "query": prompt,
+                "query": full_prompt,
                 "optimizationMode": "speed",
                 "systemInstructions": "Réponds simplement.",
                 "stream": True,
-                "history": []
+                "history": []  # On met l'historique à vide, tout est dans 'query'
             }
             headers = {'Content-Type': 'application/json'}
-            print('[DEBUG FRONT MODEL]', model)
-            print('[DEBUG BACKEND KEY]', model_key)
-            print('[DEBUG PAYLOAD]', payload)
+
+            print("=== PROMPT ENVOYÉ À PERPLEXICA ===")
+            print(payload["query"])
+
             response = requests.post(
                 PERPLEXICA_API_URL,
                 headers=headers,
                 json=payload,
                 stream=True,
-                timeout=60
+                timeout=120
             )
             response.raise_for_status()
+
+            full_response = ""
             for line in response.iter_lines():
                 if line:
                     try:
                         obj = json.loads(line.decode('utf-8'))
-                        # Renvoie chaque type selon le streaming Perplexica officiel
                         if obj.get("type") == "init":
                             continue
                         if obj.get("type") == "sources":
                             yield f'data: {json.dumps({"type":"sources","data":obj["data"]})}\n\n'
                             continue
                         if obj.get("type") == "response" and isinstance(obj.get("data"), str):
+                            full_response += obj["data"]
                             yield f'data: {json.dumps({"type":"response","data":obj["data"]})}\n\n'
                             continue
                         if obj.get("type") == "done":
@@ -527,9 +491,13 @@ def stream_perplexica_response(prompt: str, model: str, session_id: str):
                             continue
                     except Exception:
                         continue
+
+            # 4. Ajouter la réponse IA à l’historique après le streaming
+            context_history.append({"role": "assistant", "content": full_response})
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
     return Response(
         generate(),
         mimetype='text/event-stream',
@@ -542,25 +510,28 @@ def stream_perplexica_response(prompt: str, model: str, session_id: str):
 
 
 
+
+
+
+
 def stream_ollama_response(prompt: str, model: str, session_id: str):
     """Stream Ollama avec mémoire de session."""
     def generate():
         try:
             model_name = model.split(":")[-1]
-            
+
             # ✅ RÉCUPÉRER TOUT LE CONTEXTE DE LA SESSION
             session = SESSIONS.get(session_id, {})
             context_history = session.get("context", [])
-            
-            # ✅ CONSTRUIRE LE PROMPT AVEC TOUT L'HISTORIQUE
+
+            # ✅ CONSTRUIRE LE PROMPT AVEC TOUT L'HISTORIQUE (utiliser 'content', PAS 'text')
             full_prompt = ""
-            if context_history:
-                for msg in context_history:
-                    role = "Q" if msg["role"] == "user" else "A"
-                    full_prompt += f"{role}: {msg['text']}\n"
-            
+            for msg in context_history:
+                role = "Q" if msg["role"] == "user" else "A"
+                full_prompt += f"{role}: {msg['content']}\n"  # ici !
+
             full_prompt += f"Q: {prompt}\nA:"
-            
+
             response = requests.post(
                 "http://localhost:11434/api/generate",
                 json={
@@ -572,7 +543,7 @@ def stream_ollama_response(prompt: str, model: str, session_id: str):
                 timeout=300
             )
             response.raise_for_status()
-            
+
             full_response = ""
             for line in response.iter_lines():
                 if line:
@@ -585,14 +556,14 @@ def stream_ollama_response(prompt: str, model: str, session_id: str):
                             yield f"data: {data}\n\n"
                     except json.JSONDecodeError:
                         continue
-            
-            # ✅ SAUVEGARDER DANS LA SESSION
+
+            # ✅ SAUVEGARDER DANS LA SESSION (toujours 'content')
             if session_id in SESSIONS:
-                SESSIONS[session_id]["context"].append({"role": "user", "text": prompt})
-                SESSIONS[session_id]["context"].append({"role": "assistant", "text": full_response})
-            
+                SESSIONS[session_id]["context"].append({"role": "user", "content": prompt})
+                SESSIONS[session_id]["context"].append({"role": "assistant", "content": full_response})
+
             yield "data: [DONE]\n\n"
-            
+
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
@@ -606,14 +577,21 @@ def stream_ollama_response(prompt: str, model: str, session_id: str):
         }
     )
 
+
 def stream_perplexity_response(prompt: str, model: str, session_id: str):
     def generate():
         try:
-            session = SESSIONS.get(session_id, {})
-            context_history = session.get("context", [])
+            session = SESSIONS.setdefault(session_id, {"context": []})
+            context_history = session["context"]
 
-            # Construire prompt complet si besoin
-            full_prompt = prompt
+            # 1. Ajouter la question utilisateur à l'historique serveur
+            context_history.append({"role": "user", "content": prompt})
+
+            # 2. Construire l'historique façon Perplexity API
+            messages = []
+            for item in context_history[-5:]:  # Ou -10 pour plus de mémoire
+                role = "user" if item["role"] == "user" else "assistant"
+                messages.append({"role": role, "content": item["content"]})
 
             headers = {
                 'Authorization': f'Bearer {PERPLEXITY_API_KEY}',
@@ -622,7 +600,7 @@ def stream_perplexity_response(prompt: str, model: str, session_id: str):
 
             payload = {
                 'model': model.split(":")[-1],
-                'messages': [{'role': 'user', 'content': full_prompt}],
+                'messages': messages,
                 'max_tokens': 2048,
                 'temperature': 0.7,
                 'stream': True
@@ -655,9 +633,8 @@ def stream_perplexity_response(prompt: str, model: str, session_id: str):
                         except json.JSONDecodeError:
                             continue
 
-            if session_id in SESSIONS:
-                SESSIONS[session_id]["context"].append({"role": "user", "text": prompt})
-                SESSIONS[session_id]["context"].append({"role": "assistant", "text": full_response})
+            # 3. Ajouter la réponse IA à l'historique serveur
+            context_history.append({"role": "assistant", "content": full_response})
 
             yield "data: [DONE]\n\n"
 

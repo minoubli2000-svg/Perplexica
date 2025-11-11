@@ -18,6 +18,15 @@ services:
       - ollama-data:/root/.ollama
     networks:
       - themis-network
+    # -------- GPU support --------------
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    # -------- /GPU support -------------
 
   perplexica-frontend:
     image: itzcrazykns1337/perplexica:latest
